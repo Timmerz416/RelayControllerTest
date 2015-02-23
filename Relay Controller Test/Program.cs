@@ -31,6 +31,9 @@ namespace RelayControllerTest {
 		private static bool relayOn = false;	// Keeps track of whether the relay is on or off
 		private static bool overrideOn = false;	// Keeps track of whether the programming override mode is on or off
 
+		// Constants
+		private static double TEMP_UNDEFINED = 200.0;	// High temperature values signifies it has not been set
+
 		//===========================================================================
 		// XBEE SETUP
 		//===========================================================================
@@ -82,22 +85,68 @@ namespace RelayControllerTest {
 			}
 
 			// Setup and start the timer
-			Timer dataPoll = new Timer(new TimerCallback(OnTimer), null, 0, 10000);	// Timer fires every 10 seconds, for development purposes
+			Timer dataPoll = new Timer(new TimerCallback(OnTimer), null, 5000, 10000);	// Timer fires every 10 seconds, for development purposes
 
 			//--------------------------------------------------------------------------
 			// INFINTE LOOP TO CHECK POWER STATUS
 			//--------------------------------------------------------------------------
 			while(true) {
 				// Check the status of the thermostat based on power from on/off switch (high = on; low = off)
+				double powerLevel = pwrInput.Read();
 
+				// Evaluate the thermostat and relay control based on the current voltage level
+				if((powerLevel > 1.5) && !thermoOn) {	// Turn on the thermostat if previously off
+					// Update the thermostat status indicators
+					thermoOn = true;	// Set the master flag
+					pwrStatusOutput.Write(true);	// Turn on the thermostat status LED
+					Debug.Print("Thermostat turned ON");
+
+					// Determine the relay status
+					SetRelay(false);	// Turn off the relay by default as the programming logic will evaluate its status
+					EvaluateProgramming(true);	// Force a data update since the thermostat status changed
+				} else if((powerLevel < 1.5) && thermoOn) {	// Turn off the thermostat if previously on
+					// Update the thermostat status indicators
+					thermoOn = false;	// Set the master flag
+					pwrStatusOutput.Write(false);	// Turn off the thermostat status LED
+					Debug.Print("Thermostat turned OFF");
+					
+					// Open the relay for external control
+					SetRelay(true);	// Open the relay
+					SendXBeeDataPacket(TEMP_UNDEFINED);	// Programming rules don't apply, but still need to send data update for thermostat and relay status change
+				}
 			}
 		}
 
-		//---------------------------------------------------------------------------
-		// Method to respond to timer events
-		//---------------------------------------------------------------------------
+		//===========================================================================
+		// TIMER EVENT METHOD
+		//===========================================================================
 		private static void OnTimer(Object dataObj) {
 			Debug.Print("Timer event occurred.");
+		}
+
+		//===========================================================================
+		// METHOD TO OPERATE THE RELAY
+		//===========================================================================
+		private static void SetRelay(bool openRelay) {
+			if(openRelay && !relayOn) {	// Turn on relay only when it's off
+				relayOn = true;	// Set master flag
+				relayStatusOutput.Write(true);	// Code only for testing - just turns on LED
+			} else if(!openRelay && relayOn) {
+				relayOn = false;	// Set master flag
+				relayStatusOutput.Write(false);	// Code only for testing - just turns off LED
+			}
+		}
+
+		//===========================================================================
+		// METHOD TO EVALUATE THE PROGRAMMING RULES AND ISSUE RELAY ACTION
+		//===========================================================================
+		private static void EvaluateProgramming(bool forceUpdate) {
+		}
+
+		//===========================================================================
+		// METHOD TO SEND DATA PACKET THROUGH THE XBEE
+		//===========================================================================
+		private static void SendXBeeDataPacket(double temperature) {
 		}
 	}
 }
