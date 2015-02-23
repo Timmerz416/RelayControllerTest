@@ -31,6 +31,8 @@ namespace RelayControllerTest {
 		private static bool relayOn = false;	// Keeps track of whether the relay is on or off
 		private static bool overrideOn = false;	// Keeps track of whether the programming override mode is on or off
 
+		// Environment monitoring variables
+
 		// Constants
 		private static double TEMP_UNDEFINED = 200.0;	// High temperature values signifies it has not been set
 
@@ -92,7 +94,7 @@ namespace RelayControllerTest {
 			//--------------------------------------------------------------------------
 			while(true) {
 				// Check the status of the thermostat based on power from on/off switch (high = on; low = off)
-				double powerLevel = pwrInput.Read();
+				double powerLevel = 3.3*pwrInput.Read();	// The .Read() method return the fraction of the full pin voltage (3.3 V), with some offset which isn't important for this basic switch
 
 				// Evaluate the thermostat and relay control based on the current voltage level
 				if((powerLevel > 1.5) && !thermoOn) {	// Turn on the thermostat if previously off
