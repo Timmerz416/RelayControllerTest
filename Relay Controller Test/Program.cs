@@ -20,8 +20,8 @@ namespace RelayControllerTest {
 		private static AnalogInput lumInput = new AnalogInput(AnalogChannels.ANALOG_PIN_A2);	// Analog input to read the luminosity
 
 		// Digital output ports
-		private static OutputPort pwrStatusOutput = new OutputPort(Cpu.Pin.GPIO_Pin8, false);		// Output port for power led
-		private static OutputPort relayStatusOutput = new OutputPort(Cpu.Pin.GPIO_Pin9, false);		// Output port for relay status led
+		private static OutputPort pwrStatusOutput = new OutputPort(Pins.GPIO_PIN_D8, false);		// Output port for power led
+		private static OutputPort relayStatusOutput = new OutputPort(Pins.GPIO_PIN_D9, false);		// Output port for relay status led
 
 		//===========================================================================
 		// THERMOSTAT CONTROL MEMBERS
