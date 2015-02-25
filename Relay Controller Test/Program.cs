@@ -8,7 +8,8 @@ using SecretLabs.NETMF.Hardware.Netduino;
 using NETMF.OpenSource.XBee;
 using NETMF.OpenSource.XBee.Api;
 using NETMF.OpenSource.XBee.Api.Zigbee;
-using DayType = RelayControllerTest.TemperatureRule.DayType;
+using RuleDays = RelayControllerTest.TemperatureRule.RuleDays;
+using AnalogChannels = SecretLabs.NETMF.Hardware.Netduino.AnalogChannels;
 
 namespace RelayControllerTest {
 
@@ -42,6 +43,7 @@ namespace RelayControllerTest {
 		private static ArrayList rules;	// Array holding the thermostat rules
 		private const double MIN_TEMPERATURE = 16.0;	// Below this temperature, the relay opens no matter the programming
 		private const double MAX_TEMPERATURE = 26.0;	// Above this temperature, the relay closes no matter the programming
+		private const double tempBuffer = 0.5;			// The buffer to apply to the target temperature in evaluation relay status
 
 		// Constants
 		private const double TEMP_UNDEFINED = 200.0;	// High temperature values signifies it has not been set
@@ -101,12 +103,12 @@ namespace RelayControllerTest {
 
 			// Create the default rules
 			rules = new ArrayList();
-			rules.Add(new TemperatureRule(DayType.Weekdays, 23.5, 19.0));
-			rules.Add(new TemperatureRule(DayType.Weekdays, 16.5, 22.0));
-			rules.Add(new TemperatureRule(DayType.Weekdays,  9.0, 18.0));
-			rules.Add(new TemperatureRule(DayType.Weekdays,  7.0, 22.0));
-			rules.Add(new TemperatureRule(DayType.Weekends, 23.5, 19.0));
-			rules.Add(new TemperatureRule(DayType.Weekends,  7.5, 22.0));
+			rules.Add(new TemperatureRule(RuleDays.Weekdays, 23.5, 19.0));
+			rules.Add(new TemperatureRule(RuleDays.Weekdays, 16.5, 22.0));
+			rules.Add(new TemperatureRule(RuleDays.Weekdays,  9.0, 18.0));
+			rules.Add(new TemperatureRule(RuleDays.Weekdays,  7.0, 22.0));
+			rules.Add(new TemperatureRule(RuleDays.Weekends, 23.5, 19.0));
+			rules.Add(new TemperatureRule(RuleDays.Weekends,  7.5, 22.0));
 
 			// Setup and start the timer
 			Timer dataPoll = new Timer(new TimerCallback(OnTimer), null, 5000, CONTROL_INTERVAL);	// Timer delays for 5 seconds first time around, then every control interval
@@ -177,9 +179,10 @@ namespace RelayControllerTest {
 			// Get the tempeature reading
 			double temperature = 100.0*(3.3*tmpInput.Read() - 0.5);
 
-			// Get the time
-			DateTime curTime = DateTime.Now;
-			Debug.Print("Evaluating relay status at " + curTime.ToString() + ": ");
+			// Get the time and weekday for evaluating the rules
+			double curTime = DateTime.Now.Hour + DateTime.Now.Minute/60.0 + DateTime.Now.Second/3600.0;
+			RuleDays curWeekday = (RuleDays)((int) DateTime.Now.DayOfWeek);	// Cast the returned DayOfWeek enum into the custome DayType enum
+			Debug.Print("Evaluating relay status on a " + curWeekday + " at " + curTime.ToString("F4") + " with measured temperature at " + temperature.ToString("F") + ": ");
 
 			//-----------------------------------------------------------------
 			// TEMPERATURE LIMITS CHECK
@@ -196,7 +199,61 @@ namespace RelayControllerTest {
 				//-------------------------------------------------------------
 				// EVALUATE RELAY STATUS AGAINST PROGRAMMING
 				//-------------------------------------------------------------
+				// Iterate through the rules
+				bool ruleFound = false;	// Flags that a rule has been found
+				while(!ruleFound) {
+					// Iterate through the rules until the active one is found
+					for(int i = 0; i < rules.Count; i++) {
+						// Check to see if current rule applies
+						TemperatureRule curRule = rules[i] as TemperatureRule;
+						if(RuleApplies(curRule, curWeekday, curTime)) {
+							// Rule applies, now determine how to control the relay
+							if(relayOn && (temperature > (curRule.Temperature + tempBuffer))) {
+								// Temperature exceeding rule, turn off relay
+								SetRelay(false);
+								SendXBeeDataPacket(temperature);	// Send the updated status
+								Debug.Print("\tRelay turned OFF since temperature (" + temperature.ToString("F") + ") is greater than the unbuffered rule temperatre (" + curRule.Temperature.ToString("F") + ")");
+							} else if(!relayOn && (temperature < (curRule.Temperature - tempBuffer))) {
+								// Temperature below rule, turn on relay
+								SetRelay(true);
+								SendXBeeDataPacket(temperature);	// Send the updated status
+								Debug.Print("\tRelay turned ON since temperature (" + temperature.ToString("F") + ") is less than the unbuffered rule temperature (" + curRule.Temperature.ToString("F") + ")");
+							} else {
+								// No relay status change needed, but check for a forced status update
+								if(forceUpdate) SendXBeeDataPacket(temperature);
+								Debug.Print("\tRelay remains " + (relayOn ? "ON" : "OFF"));
+							}
+
+							// Rule found, so break from the loops
+							ruleFound = true;
+							break;
+						}
+					}
+
+					// No rule was found to apply, so move the day back before checking against rules again
+					if(!ruleFound) {
+						// Decrease the indicated day, but increase the time
+						if(curWeekday == RuleDays.Sunday) curWeekday = RuleDays.Saturday;
+						else curWeekday = (RuleDays) ((int) curWeekday - 1);
+						curTime += 24.0;
+					}
+				}
 			}
+		}
+
+		//=====================================================================
+		// METHOD TO CHECK IF TIME AND DATE MATCH THE RULE
+		//=====================================================================
+		private static bool RuleApplies(TemperatureRule rule, RuleDays checkDay, double checkTime) {
+			// First check: time is later than the rule time
+			if(checkTime >= rule.Time) {
+				if(rule.Days == RuleDays.Everyday) return true; // The specific day doesn't matter in this case
+				if(checkDay == rule.Days) return true;	// The day of the rule has been met
+				if((rule.Days == RuleDays.Weekdays) && (checkDay >= RuleDays.Monday) && (checkDay <= RuleDays.Friday)) return true;	// The rule is for weekdays and this is met
+				if((rule.Days == RuleDays.Weekends) && ((checkDay == RuleDays.Saturday) || (checkDay == RuleDays.Sunday))) return true;	// The rule is for weekend and this is met
+			}
+
+			return false;	// If a match hasn't been found, this rule doesn't apply and return false
 		}
 
 		//=====================================================================
