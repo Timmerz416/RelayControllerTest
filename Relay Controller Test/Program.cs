@@ -110,6 +110,10 @@ namespace RelayControllerTest {
 			rules.Add(new TemperatureRule(RuleDays.Weekends, 23.5, 19.0));
 			rules.Add(new TemperatureRule(RuleDays.Weekends,  7.5, 22.0));
 
+			// Initialize the relay status and power indicator
+			pwrStatusOutput.Write(thermoOn);
+			SetRelay(relayOn);
+
 			// Setup and start the timer
 			Timer dataPoll = new Timer(new TimerCallback(OnTimer), null, 5000, CONTROL_INTERVAL);	// Timer delays for 5 seconds first time around, then every control interval
 
