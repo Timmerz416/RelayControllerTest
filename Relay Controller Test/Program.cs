@@ -54,6 +54,16 @@ namespace RelayControllerTest {
 		// XBee sensor codes
 		private enum XBeePortData { Temperature, Luminosity, Pressure, Humidity, LuminosityLux, HeatingOn, ThermoOn, Power }
 
+		// XBee data codes
+		const byte TEMPERATURE_CODE	=   1;
+		const byte LUMINOSITY_CODE	=   2;
+		const byte PRESSURE_CODE	=   4;
+		const byte HUMIDITY_CODE	=   8;
+		const byte POWER_CODE		=  16;
+		const byte LUX_CODE			=  32;
+		const byte HEATING_CODE		=  64;
+		const byte THERMOSTAT_CODE	= 128;
+
 		// XBee command codes
 		const byte CMD_ACK			= 0;
 		const byte CMD_NACK			= 1;
@@ -193,12 +203,16 @@ namespace RelayControllerTest {
 			//-----------------------------------------------------------------
 			if(temperature < MIN_TEMPERATURE) {	// Temperature too low
 				Debug.Print("\tRelay turned on due to low temperature");
-				SetRelay(true);	// Turn on relay
-				SendXBeeDataPacket(temperature);	// Dispatch change of relay state
+				if(!relayOn) {
+					SetRelay(true);	// Turn on relay
+					SendXBeeDataPacket(temperature);	// Dispatch change of relay state
+				}
 			} else if(temperature >= MAX_TEMPERATURE) {	// Temperature above limit
 				Debug.Print("\tRelay turned off due to high temperature");
-				SetRelay(false);	// Turn off relay
-				SendXBeeDataPacket(temperature);	// Dispatch change of relay state
+				if(relayOn) {
+					SetRelay(false);	// Turn off relay
+					SendXBeeDataPacket(temperature);	// Dispatch change of relay state
+				}
 			} else {	// Temperature is within limits, so evaluate relay status based on rules in effect
 				//-------------------------------------------------------------
 				// EVALUATE RELAY STATUS AGAINST PROGRAMMING
@@ -224,8 +238,8 @@ namespace RelayControllerTest {
 								Debug.Print("\tRelay turned ON since temperature (" + temperature.ToString("F") + ") is less than the unbuffered rule temperature (" + curRule.Temperature.ToString("F") + ")");
 							} else {
 								// No relay status change needed, but check for a forced status update
-								if(forceUpdate) SendXBeeDataPacket(temperature);
 								Debug.Print("\tRelay remains " + (relayOn ? "ON" : "OFF"));
+								if(forceUpdate) SendXBeeDataPacket(temperature);
 							}
 
 							// Rule found, so break from the loops
@@ -264,6 +278,111 @@ namespace RelayControllerTest {
 		// METHOD TO SEND DATA PACKET THROUGH THE XBEE
 		//=====================================================================
 		private static void SendXBeeDataPacket(double temperature) {
+			//-----------------------------------------------------------------
+			// GET ANY DATA FOR THE TRANSMISSION
+			//-----------------------------------------------------------------
+			// Get temperature
+			float floatTemp = (temperature == TEMP_UNDEFINED) ? 100f*(3.3f*((float) tmpInput.Read()) - 0.5f) : (float) temperature;	// Convert double to float
+
+			// Get luminosity
+			float luminosity = 3.3f*((float) lumInput.Read());
+
+			// Get status indicators
+			float power = 3.3f;
+			float thermoStatus = thermoOn ? 1f : 0f;
+			float relayStatus = relayOn ? 1f : 0f;
+
+			//-----------------------------------------------------------------
+			// CREATE THE BYTE ARRAYS AND TRANSMISSION PACKAGE
+			//-----------------------------------------------------------------
+			// Convert the floats to byte arrays
+			byte[] tempBytes, luxBytes, powerBytes, thermoBytes, relayBytes;
+			tempBytes = FloatToByte(floatTemp);
+			luxBytes = FloatToByte(luminosity);
+			powerBytes = FloatToByte(power);
+			thermoBytes = FloatToByte(thermoStatus);
+			relayBytes = FloatToByte(relayStatus);
+
+			// Allocate the data package
+			int floatSize = sizeof(float);
+			Debug.Assert(floatSize == 4);
+			byte[] package = new byte[5*(floatSize+1) + 1];	// Allocate memory for the package
+
+			// Create the package of data
+			package[0] = CMD_SENSOR_DATA;	// Indicate the package contains sensor data
+			package[1] = TEMPERATURE_CODE;
+			package[(floatSize+1)+1] = LUX_CODE;
+			package[2*(floatSize+1)+1] = POWER_CODE;
+			package[3*(floatSize+1)+1] = HEATING_CODE;
+			package[4*(floatSize+1)+1] = THERMOSTAT_CODE;
+			for(int i = 0; i < floatSize; i++) {
+				package[i+2] = tempBytes[i];
+				package[(floatSize+1)+(i+2)] = luxBytes[i];
+				package[2*(floatSize+1)+(i+2)] = powerBytes[i];
+				package[3*(floatSize+1)+(i+2)] = relayBytes[i];
+				package[4*(floatSize+1)+(i+2)] = thermoBytes[i];
+			}
+
+			// Create the TxRequest packet
+			XBeeAddress64 xbeeCoordinator = new XBeeAddress64("00 00 00 00 00 00 00 00");
+			TxRequest txRequest = new TxRequest(xbeeCoordinator, package);
+
+			//-----------------------------------------------------------------
+			// TRANSMIST THE DATA
+			//-----------------------------------------------------------------
+			// Print transmission to the debugger
+			string message = "Sending the following message (" + floatTemp.ToString("F") + ", " + luminosity.ToString("F") + ", " + power.ToString("F") + ", " + relayStatus.ToString("F0") + ", " + thermoStatus.ToString("F0") + "): ";
+			for(int i = 0; i < package.Length; i++) {
+				if(i != 0) message += "-";	// Add spacers between bytes
+				message += package[i].ToString("X");	// Output byte as a hex number
+			}
+			Debug.Print(message);
+
+			// Transmit through XBee
+			if(xbeeConnected) {
+				try {
+					// Send the message and check for response
+					XBeeResponse response = xBee.Send(txRequest).To(xbeeCoordinator).GetResponse();
+					if(response is TxStatusResponse) {
+						// Check status of the response
+						TxStatusResponse txResponse = response as TxStatusResponse;
+						if(!txResponse.IsSuccess) {
+							// Print out error - TODO: save the data to a local data logger
+							Debug.Print("Transmission came back with the following information: " + txResponse);
+						}
+					} else Debug.Print("Unusual response received from TxRequest");
+				} catch(XBeeTimeoutException timeoutEx) {
+					// Print out timeout - TODO: save the data to a local data logger
+					Debug.Print("Transmission timed out - check for connection with coordinator");
+				}
+			} else Debug.Print("Cannot transmit XBee packet as the radio is not connected");
 		}
+
+		//=====================================================================
+		// METHOD TO CONVERT A BYTE ARRAY TO A FLOAT
+		//=====================================================================
+		private static unsafe float ByteToFloat(byte[] byte_array) {
+			uint ret = (uint) (byte_array[0] << 0 | byte_array[1] << 8 | byte_array[2] << 16 | byte_array[3] << 24);
+			float r = *((float*) &ret);
+			return r;
+		}
+
+		//=====================================================================
+		// METHOD TO CONVERT A FLOAT TO A BYTE ARRAY
+		//=====================================================================
+		private static unsafe byte[] FloatToByte(float value) {
+			Debug.Assert(sizeof(uint) == 4);	// Confirm that the int is a 4-byte variable
+
+			uint asInt = *((uint*) &value);
+			byte[] byte_array = new byte[sizeof(uint)];
+
+			byte_array[0] = (byte) (asInt & 0xFF);
+			byte_array[1] = (byte) ((asInt >> 8) & 0xFF);
+			byte_array[2] = (byte) ((asInt >> 16) & 0xFF);
+			byte_array[3] = (byte) ((asInt >> 24) & 0xFF);
+
+			return byte_array;
+		}
+
 	}
 }
