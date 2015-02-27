@@ -136,25 +136,33 @@ namespace RelayControllerTest {
 				double powerLevel = 3.3*pwrInput.Read();	// The .Read() method return the fraction of the full pin voltage (3.3 V), with some offset which isn't important for this basic switch
 
 				// Evaluate the thermostat and relay control based on the current voltage level
-				if((powerLevel > 1.5) && !thermoOn) {	// Turn on the thermostat if previously off
-					// Update the thermostat status indicators
-					thermoOn = true;	// Set the master flag
-					pwrStatusOutput.Write(true);	// Turn on the thermostat status LED
-					Debug.Print("Thermostat turned ON");
+				if((powerLevel > 1.5) && !thermoOn) SetPowerMode(true);			// Turn on the thermostat if previously off
+				else if((powerLevel < 1.5) && thermoOn) SetPowerMode(false);	// Turn off the thermostat if previously on
+			}
+		}
 
-					// Determine the relay status
-					SetRelay(false);	// Turn off the relay by default as the programming logic will evaluate its status
-					EvaluateProgramming(true);	// Force a data update since the thermostat status changed
-				} else if((powerLevel < 1.5) && thermoOn) {	// Turn off the thermostat if previously on
-					// Update the thermostat status indicators
-					thermoOn = false;	// Set the master flag
-					pwrStatusOutput.Write(false);	// Turn off the thermostat status LED
-					Debug.Print("Thermostat turned OFF");
-					
-					// Open the relay for external control
-					SetRelay(true);	// Open the relay
-					SendXBeeDataPacket(TEMP_UNDEFINED);	// Programming rules don't apply, but still need to send data update for thermostat and relay status change
-				}
+		//=====================================================================
+		// METHOD TO SET THE POWER MODE OF THE THERMOSTAT
+		//=====================================================================
+		private static void SetPowerMode(bool turnOn) {
+			if(turnOn) {
+				// Update the thermostat status indicators
+				thermoOn = true;	// Set the master flag
+				pwrStatusOutput.Write(true);	// Turn on the thermostat status LED
+				Debug.Print("Thermostat turned ON");
+
+				// Determine the relay status
+				SetRelay(false);	// Turn off the relay by default as the programming logic will evaluate its status
+				EvaluateProgramming(true);	// Force a data update since the thermostat status changed
+			} else {
+				// Update the thermostat status indicators
+				thermoOn = false;	// Set the master flag
+				pwrStatusOutput.Write(false);	// Turn off the thermostat status LED
+				Debug.Print("Thermostat turned OFF");
+
+				// Open the relay for external control
+				SetRelay(true);	// Open the relay
+				SendXBeeDataPacket(TEMP_UNDEFINED);	// Programming rules don't apply, but still need to send data update for thermostat and relay status change
 			}
 		}
 
@@ -207,6 +215,19 @@ namespace RelayControllerTest {
 		// XBEE DATA RECEIVED EVENT HANDLER
 		//=====================================================================
 		static void xBee_DataReceived(XBeeApi receiver, byte[] data, XBeeAddress sender) {
+			// Format the data packet to correct the escape charaters
+			byte[] packet = FormatApiMode(data, true);
+
+			// Determine the type of packet
+			switch(packet[0]) {
+				case CMD_THERMO_POWER:	// Command sent to power on/off the thermostat
+					if((packet[1] == STATUS_ON) && !thermoOn) SetPowerMode(true);		// Turn on a thermostat that is off
+					else if((packet[1] == STATUS_OFF) && thermoOn) SetPowerMode(false);	// Turn off a thermostat that is on
+					break;
+				default:
+					Debug.Print("TxRequest type has not been implemented yet");
+					break;
+			}
 		}
 
 		//=====================================================================
