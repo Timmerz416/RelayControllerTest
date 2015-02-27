@@ -201,17 +201,18 @@ namespace RelayControllerTest {
 			//-----------------------------------------------------------------
 			// TEMPERATURE LIMITS CHECK
 			//-----------------------------------------------------------------
+			bool updatePacket = forceUpdate;	// Default value for update data packet is from a parameter for a forced update
 			if(temperature < MIN_TEMPERATURE) {	// Temperature too low
 				Debug.Print("\tRelay turned on due to low temperature");
 				if(!relayOn) {
 					SetRelay(true);	// Turn on relay
-					SendXBeeDataPacket(temperature);	// Dispatch change of relay state
+					updatePacket = true;	// Indicate to dispatch change of relay state
 				}
 			} else if(temperature >= MAX_TEMPERATURE) {	// Temperature above limit
 				Debug.Print("\tRelay turned off due to high temperature");
 				if(relayOn) {
 					SetRelay(false);	// Turn off relay
-					SendXBeeDataPacket(temperature);	// Dispatch change of relay state
+					updatePacket = true;	// Indicate to dispatch change of relay state
 				}
 			} else {	// Temperature is within limits, so evaluate relay status based on rules in effect
 				//-------------------------------------------------------------
@@ -229,17 +230,16 @@ namespace RelayControllerTest {
 							if(relayOn && (temperature > (curRule.Temperature + tempBuffer))) {
 								// Temperature exceeding rule, turn off relay
 								SetRelay(false);
-								SendXBeeDataPacket(temperature);	// Send the updated status
+								updatePacket = true;	// Indicate to send the updated status
 								Debug.Print("\tRelay turned OFF since temperature (" + temperature.ToString("F") + ") is greater than the unbuffered rule temperatre (" + curRule.Temperature.ToString("F") + ")");
 							} else if(!relayOn && (temperature < (curRule.Temperature - tempBuffer))) {
 								// Temperature below rule, turn on relay
 								SetRelay(true);
-								SendXBeeDataPacket(temperature);	// Send the updated status
+								updatePacket = true;	// Inidcate to send teh updated status
 								Debug.Print("\tRelay turned ON since temperature (" + temperature.ToString("F") + ") is less than the unbuffered rule temperature (" + curRule.Temperature.ToString("F") + ")");
 							} else {
 								// No relay status change needed, but check for a forced status update
 								Debug.Print("\tRelay remains " + (relayOn ? "ON" : "OFF"));
-								if(forceUpdate) SendXBeeDataPacket(temperature);
 							}
 
 							// Rule found, so break from the loops
@@ -257,6 +257,11 @@ namespace RelayControllerTest {
 					}
 				}
 			}
+
+			//-----------------------------------------------------------------
+			// SEND THE DATA
+			//-----------------------------------------------------------------
+			if(updatePacket) SendXBeeDataPacket(temperature);
 		}
 
 		//=====================================================================
