@@ -101,6 +101,7 @@ namespace RelayControllerTest {
 			xBee.EnableDataReceivedEvent();
 			xBee.EnableAddressLookup();
 			xBee.EnableModemStatusEvent();
+			xBee.DataReceived += xBee_DataReceived;
 
 			try {
 				// Connect to the XBee
@@ -155,6 +156,57 @@ namespace RelayControllerTest {
 					SendXBeeDataPacket(TEMP_UNDEFINED);	// Programming rules don't apply, but still need to send data update for thermostat and relay status change
 				}
 			}
+		}
+
+		//=====================================================================
+		// FORMATS THE ESCAPE CHARACTERS
+		//=====================================================================
+		private static byte[] FormatApiMode(byte[] packet, bool filterIncoming) {
+			// Local variables and constants
+			byte[] escapeChars = { 0x7d, 0x7e, 0x11, 0x13 };	// The bytes requiring escaping
+			const byte filter = 0x20;	// The XOR filter
+			byte[] output;	// Contains the formatted packet
+			int outSize = packet.Length;	// Contains the size of the outgoing packet
+
+			if(filterIncoming) {	// Removed any escaping sequences
+				//-------------------------------------------------------------
+				// REMOVE ESCAPING CHARACTERS FROM PACKET FROM XBEE
+				//-------------------------------------------------------------
+				// Count the outgoing packet size
+				foreach(byte b in packet) if(b != escapeChars[0]) outSize--;
+
+				// Iterate through each byte and adjust
+				output = new byte[outSize];
+				int pos = 0;
+				for(int i = 0; i < packet.Length; i++) {
+					if(packet[i] == escapeChars[0]) output[pos++] = (byte) (packet[++i]^filter);	// Cast needed as XOR works on ints
+					else output[pos++] = packet[i];
+				}
+			} else {
+				//-------------------------------------------------------------
+				// ADD ESCAPING CHARACTERS TO PACKET SENT FROM XBEE
+				//-------------------------------------------------------------
+				// Determine the new size
+				foreach(byte b in packet) if(Array.IndexOf(escapeChars, b) > -1) outSize++;
+
+				// Iterate through each byte and adjust
+				output = new byte[outSize];
+				int pos = 0;
+				for(int i = 0; i < packet.Length; i++) {
+					if(Array.IndexOf(escapeChars, packet[i]) > -1) {
+						output[pos++] = escapeChars[0];
+						output[pos++] = (byte) (packet[i]^filter);
+					} else output[pos++] = packet[i];
+				}
+			}
+
+			return output;
+		}
+
+		//=====================================================================
+		// XBEE DATA RECEIVED EVENT HANDLER
+		//=====================================================================
+		static void xBee_DataReceived(XBeeApi receiver, byte[] data, XBeeAddress sender) {
 		}
 
 		//=====================================================================
