@@ -181,7 +181,7 @@ namespace RelayControllerTest {
 				// REMOVE ESCAPING CHARACTERS FROM PACKET FROM XBEE
 				//-------------------------------------------------------------
 				// Count the outgoing packet size
-				foreach(byte b in packet) if(b != escapeChars[0]) outSize--;
+				foreach(byte b in packet) if(b == escapeChars[0]) outSize--;
 
 				// Iterate through each byte and adjust
 				output = new byte[outSize];
