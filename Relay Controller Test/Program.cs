@@ -221,8 +221,9 @@ namespace RelayControllerTest {
 			// Determine the type of packet
 			switch(packet[0]) {
 				case CMD_THERMO_POWER:	// Command sent to power on/off the thermostat
-					if((packet[1] == STATUS_ON) && !thermoOn) SetPowerMode(true);		// Turn on a thermostat that is off
-					else if((packet[1] == STATUS_OFF) && thermoOn) SetPowerMode(false);	// Turn off a thermostat that is on
+					Debug.Print("Received command to change themrostat power status to " + (packet[1] == STATUS_ON ? "ON" : "OFF") + " - NOT IMPLEMENTED IN HARDWARE");
+					//if((packet[1] == STATUS_ON) && !thermoOn) SetPowerMode(true);		// Turn on a thermostat that is off
+					//else if((packet[1] == STATUS_OFF) && thermoOn) SetPowerMode(false);	// Turn off a thermostat that is on
 					break;
 				default:
 					Debug.Print("TxRequest type has not been implemented yet");
@@ -429,7 +430,7 @@ namespace RelayControllerTest {
 							Debug.Print("Transmission came back with the following information: " + txResponse);
 						}
 					} else Debug.Print("Unusual response received from TxRequest");
-				} catch(XBeeTimeoutException timeoutEx) {
+				} catch(XBeeTimeoutException) {
 					// Print out timeout - TODO: save the data to a local data logger
 					Debug.Print("Transmission timed out - check for connection with coordinator");
 				}
