@@ -33,6 +33,7 @@ namespace RelayControllerTest {
 		private static bool thermoOn = true;	// Keeps track of whether the thermostat is on or off
 		private static bool relayOn = false;	// Keeps track of whether the relay is on or off
 		private static bool overrideOn = false;	// Keeps track of whether the programming override mode is on or off
+		private static double overrideTemp = 0;	// Contains the override temperature the thermostat is targetting
 
 		// Timing variables
 		private const int CONTROL_INTERVAL = 10000;	// The number of microseconds between control evaluations
@@ -225,6 +226,22 @@ namespace RelayControllerTest {
 					//if((packet[1] == STATUS_ON) && !thermoOn) SetPowerMode(true);		// Turn on a thermostat that is off
 					//else if((packet[1] == STATUS_OFF) && thermoOn) SetPowerMode(false);	// Turn off a thermostat that is on
 					break;
+				case CMD_OVERRIDE:	// Command to turn on/off the override and set the target temperature
+					// Check status flag
+					if(packet[1] == STATUS_ON) {	// Turn on override mode
+						// Convert the byte array to a float
+						byte[] tempArray = new byte[4];
+						for(int i = 0; i < 4; i++) tempArray[i] = packet[i+2];
+						overrideTemp = (double) ByteToFloat(tempArray);
+
+						// Change override status
+						overrideOn = true;
+						Debug.Print("Recieved command to turn on override mode with target temperature of " + overrideTemp);
+					} else {	// Turn off override mode
+						overrideOn = false;
+						Debug.Print("Received command to turn off override mode");
+					}
+					break;
 				default:
 					Debug.Print("TxRequest type has not been implemented yet");
 					break;
@@ -288,6 +305,21 @@ namespace RelayControllerTest {
 					SetRelay(false);	// Turn off relay
 					updatePacket = true;	// Indicate to dispatch change of relay state
 				}
+			} else if(overrideOn) {	// Override is on
+				//-------------------------------------------------------------
+				// EVALUATE RELAY STATUS AGAINST OVERRIDE TEMPERATURE
+				//-------------------------------------------------------------
+				if(relayOn && (temperature > (overrideTemp + tempBuffer))) {
+					// Turn off relay
+					SetRelay(false);
+					updatePacket = true;
+					Debug.Print("\tOVERRIDE MODE: Relay turned OFF since temperature (" + temperature.ToString("F") + ") is greater than unbuffered override temperature (" + overrideTemp.ToString("F") + ")");
+				} else if(!relayOn && (temperature < (overrideTemp - tempBuffer))) {
+					// Turn on relay
+					SetRelay(true);
+					updatePacket = true;
+					Debug.Print("\tOVERRIDE MODE: Relay turned ON since temperature (" + temperature.ToString("F") + ") is less than unbuffered override temperature (" + overrideTemp.ToString("F") + ")");
+				} else Debug.Print("\tOVERRIDE MODE: Relay remains " + (relayOn ? "ON" : "OFF"));
 			} else {	// Temperature is within limits, so evaluate relay status based on rules in effect
 				//-------------------------------------------------------------
 				// EVALUATE RELAY STATUS AGAINST PROGRAMMING
@@ -305,7 +337,7 @@ namespace RelayControllerTest {
 								// Temperature exceeding rule, turn off relay
 								SetRelay(false);
 								updatePacket = true;	// Indicate to send the updated status
-								Debug.Print("\tRelay turned OFF since temperature (" + temperature.ToString("F") + ") is greater than the unbuffered rule temperatre (" + curRule.Temperature.ToString("F") + ")");
+								Debug.Print("\tRelay turned OFF since temperature (" + temperature.ToString("F") + ") is greater than the unbuffered rule temperature (" + curRule.Temperature.ToString("F") + ")");
 							} else if(!relayOn && (temperature < (curRule.Temperature - tempBuffer))) {
 								// Temperature below rule, turn on relay
 								SetRelay(true);
