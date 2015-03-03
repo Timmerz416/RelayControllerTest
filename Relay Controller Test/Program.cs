@@ -66,8 +66,8 @@ namespace RelayControllerTest {
 		const byte THERMOSTAT_CODE	= 128;
 
 		// XBee command codes
-		const byte CMD_ACK			= 0;
-		const byte CMD_NACK			= 1;
+		const byte CMD_NACK			= 0;
+		const byte CMD_ACK			= 1;
 		const byte CMD_THERMO_POWER	= 2;
 		const byte CMD_OVERRIDE		= 3;
 		const byte CMD_RULE_CHANGE	= 4;
@@ -241,6 +241,11 @@ namespace RelayControllerTest {
 						overrideOn = false;
 						Debug.Print("Received command to turn off override mode");
 					}
+					break;
+				case CMD_RULE_CHANGE:	// A command to change/view the thermostat rules has been made
+					// Take action based on the issued command
+					if(packet[1] == STATUS_GET) ProcessGetRuleCMD();	// Get the rules and pass it back to the coordinator
+					else Debug.Print("Received TxRequest for CMD_RULE_CHANGE with status: " + packet[1]);
 					break;
 				default:
 					Debug.Print("TxRequest type has not been implemented yet");
@@ -467,6 +472,63 @@ namespace RelayControllerTest {
 					Debug.Print("Transmission timed out - check for connection with coordinator");
 				}
 			} else Debug.Print("Cannot transmit XBee packet as the radio is not connected");
+		}
+
+		//=====================================================================
+		// ProcessGetRuleCMD
+		//=====================================================================
+		/// <summary>
+		/// This method creates a XBee packet containing the rules and issues to the coordinator
+		/// </summary>
+		private static void ProcessGetRuleCMD() {
+			//-----------------------------------------------------------------
+			// CREATE THE DATA PACKET
+			//-----------------------------------------------------------------
+			// Initialize the packet
+			int numBytes = 9*rules.Count + 3;	// Get the size of the data packet
+			byte[] packet = new byte[numBytes];	// Will contain the data
+			packet[0] = CMD_RULE_CHANGE;
+			packet[1] = STATUS_GET;
+			packet[2] = (byte) numBytes;
+
+			// Add the rules
+			for(int i = 0; i < rules.Count; i++) {
+				// Convert the floating point values to byte arrays
+				TemperatureRule curRule = rules[i] as TemperatureRule;	// Get the current rule as the TemperatureRule type
+				byte[] timeArray, tempArray;
+				timeArray = FloatToByte((float) curRule.Time);
+				tempArray = FloatToByte((float) curRule.Temperature);
+				
+				// Copy byte arrays to the packet
+				packet[9*i + 3] = (byte) curRule.Days;
+				for(int j = 0; j < 4; j++) {
+					packet[9*i + j + 4] = timeArray[j];
+					packet[9*i + j + 8] = tempArray[j];
+				}
+			}
+
+			//-----------------------------------------------------------------
+			// SEND PACKET TO COORDINATOR
+			//-----------------------------------------------------------------
+			// Create the transmission object to coordinator
+			TxRequest ruleTX = new TxRequest(new XBeeAddress64("00 00 00 00 00 00 00 00"), packet);
+
+			// Transmit to coordinator
+			if(xbeeConnected) {	// Check that the XBee is connected
+				bool cmdSent = false;	// Tracks send status of the XBee transmission
+				while(!cmdSent) {	// Iterate until the transmission has been received
+					try {
+						XBeeResponse result = xBee.Send(ruleTX).GetResponse();
+						Debug.Assert(result is TxStatusResponse);	// For debugging
+						TxStatusResponse txResponse = result as TxStatusResponse;
+						if(txResponse.IsSuccess) cmdSent = true;
+						else Debug.Print("Could not send rule status");
+					} catch(XBeeTimeoutException) {
+						Debug.Print("Timeout sending message, will try again");
+						Thread.Sleep(100);
+					}
+				}
+			}
 		}
 
 		//=====================================================================
