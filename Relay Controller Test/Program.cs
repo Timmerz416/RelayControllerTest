@@ -489,7 +489,7 @@ namespace RelayControllerTest {
 			byte[] packet = new byte[numBytes];	// Will contain the data
 			packet[0] = CMD_RULE_CHANGE;
 			packet[1] = STATUS_GET;
-			packet[2] = (byte) numBytes;
+			packet[2] = (byte) rules.Count;
 
 			// Add the rules
 			for(int i = 0; i < rules.Count; i++) {
