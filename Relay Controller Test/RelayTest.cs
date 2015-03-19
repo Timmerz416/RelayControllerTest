@@ -39,6 +39,7 @@ namespace RelayControllerTest {
 		private const int CONTROL_INTERVAL = 60000;	// The number of microseconds between control evaluations
 		private const int SENSOR_PERIODS = 5;		// The number of control periods before a sensor evaluation
 		private static int controlLoops = 0;		// Tracks the current number of control loops without a sensor loop
+		private static bool sensorSent = false;		// Tracks whether the controller is waiting for a sensor acknowledgement
 
 		// Thermostat rule variables
 		private static ArrayList rules;	// Array holding the thermostat rules
@@ -179,7 +180,7 @@ namespace RelayControllerTest {
 			byte[] request = FormatApiMode(data, true);
 
 			// Print out the received request
-			string message = "Received the following request from " + sender.ToString() + ": ";
+			string message = "Received the following message from " + sender.ToString() + ": ";
 			for(int i = 0; i < request.Length; i++) message += request[i].ToString("X") + (i == (request.Length - 1) ? "" : "-");
 			Debug.Print(message);
 
@@ -187,7 +188,7 @@ namespace RelayControllerTest {
 			byte[] response = ProcessRequest(request);
 
 			// Send the response
-			SendXBeeTransmission(FormatApiMode(response, false), sender);
+			if(response != null) SendXBeeTransmission(FormatApiMode(response, false), sender);
 		}
 
 		//=====================================================================
@@ -205,7 +206,17 @@ namespace RelayControllerTest {
 			//-----------------------------------------------------------------
 			// DETERMINE THE TYPE OF PACKET RECEIVED AND ACT ACCORDINGLY 
 			//-----------------------------------------------------------------
-			if(command[0] == CMD_THERMO_POWER) {	// Command sent to power on/off the thermostat
+			if(sensorSent && (command[0] == CMD_SENSOR_DATA)) {
+				// Check for acknowledgement
+				if(command[1] == CMD_ACK) {
+					sensorSent = false;
+					Debug.Print("Sensor data acknowledged!");
+				} else {
+					// TODO => Save the last sensor data to the data logger
+					Debug.Print("Need to write last sensor data to logger!");
+				}
+			}
+			else if(command[0] == CMD_THERMO_POWER) {	// Command sent to power on/off the thermostat
 				Debug.Print("Received command to change themrostat power status to " + (command[1] == STATUS_ON ? "ON" : "OFF") + " - NOT IMPLEMENTED IN HARDWARE");
 				dataPacket = new byte[] { CMD_THERMO_POWER, CMD_ACK };	// Acknowledge the command
 				//-----------------------------------------------------------------
@@ -299,30 +310,28 @@ namespace RelayControllerTest {
 			//-----------------------------------------------------------------
 			// Create the transmission object to the specified destination
 			TxRequest response = new TxRequest(destination, payload);
+			response.Option = TxRequest.Options.DisableAck;
 
 			// Create debug console message
-			string message = "Sent response to " + destination.ToString() + " (";
+			string message = "Sending message to " + destination.ToString() + " (";
 			for(int i = 0; i < payload.Length; i++) message += payload[i].ToString("X") + (i == (payload.Length - 1) ? "" : "-");
 			message += ") => ";
 
 			// Connect to the XBee
-			bool responseACK = false;
+			bool sentMessage = false;
 			if(ConnectToXBee()) {
 				try {
 					// Send the response
-					XBeeResponse reply = xBee.Send(response).GetResponse();	// Send packet
-					if(reply is TxStatusResponse) {
-						TxStatusResponse txStatus = reply as TxStatusResponse;	// Convert the response
-						responseACK = txStatus.IsSuccess;
-						message += responseACK ? "Sent" : "Not Received";
-					}
+					xBee.Send(response).NoResponse();	// Send packet
+					message += "Sent";
+					sentMessage = true;
 				} catch(XBeeTimeoutException) {
-					message += "Timeout sending message";
+					message += "Timeout";
 				}  // OTHER EXCEPTION TYPES TO INCLUDE?
-			}
+			} else message += "XBee Disconnected";
 
 			Debug.Print(message);
-			return responseACK;
+			return sentMessage;
 		}
 
 		//=====================================================================
@@ -383,7 +392,7 @@ namespace RelayControllerTest {
 			//-----------------------------------------------------------------			
 			// Create the TxRequest packet and send the data
 			XBeeAddress64 loggerAddress = new XBeeAddress64(COORD_ADDRESS);
-			SendXBeeTransmission(package, loggerAddress);
+			sensorSent = SendXBeeTransmission(package, loggerAddress);
 /*			if(SendXBeeTransmission(package, loggerAddress)) {
 				// Print transmission to the debugger
 				string message = "Sent the following message (" + floatTemp.ToString("F") + ", " + luminosity.ToString("F") + ", " + power.ToString("F") + ", " + relayStatus.ToString("F0") + ", " + thermoStatus.ToString("F0") + "): ";
