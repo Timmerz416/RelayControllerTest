@@ -36,8 +36,8 @@ namespace RelayControllerTest {
 		private static double overrideTemp = 0;	// Contains the override temperature the thermostat is targetting
 
 		// Timing variables
-		private const int CONTROL_INTERVAL = 10000;	// The number of microseconds between control evaluations
-		private const int SENSOR_PERIODS = 6;		// The number of control periods before a sensor evaluation
+		private const int CONTROL_INTERVAL = 60000;	// The number of microseconds between control evaluations
+		private const int SENSOR_PERIODS = 5;		// The number of control periods before a sensor evaluation
 		private static int controlLoops = 0;		// Tracks the current number of control loops without a sensor loop
 
 		// Thermostat rule variables
@@ -66,21 +66,21 @@ namespace RelayControllerTest {
 		const byte THERMOSTAT_CODE	= 128;
 
 		// XBee command codes
-		const byte CMD_NACK			= 0;
-		const byte CMD_ACK			= 1;
-		const byte CMD_THERMO_POWER	= 2;
-		const byte CMD_OVERRIDE		= 3;
-		const byte CMD_RULE_CHANGE	= 4;
-		const byte CMD_SENSOR_DATA	= 5;
+		const byte CMD_THERMO_POWER	= 1;
+		const byte CMD_OVERRIDE		= 2;
+		const byte CMD_RULE_CHANGE	= 3;
+		const byte CMD_SENSOR_DATA	= 4;
 
 		// XBee subcommand codes
-		const byte STATUS_OFF		= 0;
-		const byte STATUS_ON		= 1;
-		const byte STATUS_GET		= 2;
-		const byte STATUS_ADD		= 3;
-		const byte STATUS_DELETE	= 4;
-		const byte STATUS_MOVE		= 5;
-		const byte STATUS_UPDATE	= 6;
+		const byte CMD_NACK			= 0;
+		const byte CMD_ACK			= 1;
+		const byte STATUS_OFF		= 2;
+		const byte STATUS_ON		= 3;
+		const byte STATUS_GET		= 4;
+		const byte STATUS_ADD		= 5;
+		const byte STATUS_DELETE	= 6;
+		const byte STATUS_MOVE		= 7;
+		const byte STATUS_UPDATE	= 8;
 
 		// XBee Connection Members
 		private static XBeeApi xBee;				// The object controlling the interface to the XBee radio
@@ -104,6 +104,7 @@ namespace RelayControllerTest {
 			xBee.EnableAddressLookup();
 			xBee.EnableModemStatusEvent();
 			xBee.DataReceived += xBee_RequestReceived;
+			NETMF.OpenSource.XBee.Util.Logger.Initialize(Debug.Print, NETMF.OpenSource.XBee.Util.LogLevel.All);
 
 			// Connect to the XBee
 			ConnectToXBee();
@@ -176,6 +177,11 @@ namespace RelayControllerTest {
 		static void xBee_RequestReceived(XBeeApi receiver, byte[] data, XBeeAddress sender) {
 			// Format the data packet to correct the escape charaters
 			byte[] request = FormatApiMode(data, true);
+
+			// Print out the received request
+			string message = "Received the following request from " + sender.ToString() + ": ";
+			for(int i = 0; i < request.Length; i++) message += request[i].ToString("X") + (i == (request.Length - 1) ? "" : "-");
+			Debug.Print(message);
 
 			// Process the request and get the response data
 			byte[] response = ProcessRequest(request);
@@ -294,22 +300,29 @@ namespace RelayControllerTest {
 			// Create the transmission object to the specified destination
 			TxRequest response = new TxRequest(destination, payload);
 
+			// Create debug console message
+			string message = "Sent response to " + destination.ToString() + " (";
+			for(int i = 0; i < payload.Length; i++) message += payload[i].ToString("X") + (i == (payload.Length - 1) ? "" : "-");
+			message += ") => ";
+
 			// Connect to the XBee
+			bool responseACK = false;
 			if(ConnectToXBee()) {
 				try {
 					// Send the response
 					XBeeResponse reply = xBee.Send(response).GetResponse();	// Send packet
 					if(reply is TxStatusResponse) {
 						TxStatusResponse txStatus = reply as TxStatusResponse;	// Convert the response
-						return txStatus.IsSuccess;
+						responseACK = txStatus.IsSuccess;
+						message += responseACK ? "Sent" : "Not Received";
 					}
 				} catch(XBeeTimeoutException) {
-					Debug.Print("Timeout sending message");
-					return false;
+					message += "Timeout sending message";
 				}  // OTHER EXCEPTION TYPES TO INCLUDE?
 			}
 
-			return false;
+			Debug.Print(message);
+			return responseACK;
 		}
 
 		//=====================================================================
@@ -368,9 +381,10 @@ namespace RelayControllerTest {
 			//-----------------------------------------------------------------
 			// TRANSMIST THE SENSOR DATA
 			//-----------------------------------------------------------------			
-			// Create the TxRequest packet
+			// Create the TxRequest packet and send the data
 			XBeeAddress64 loggerAddress = new XBeeAddress64(COORD_ADDRESS);
-			if(SendXBeeTransmission(package, loggerAddress)) {
+			SendXBeeTransmission(package, loggerAddress);
+/*			if(SendXBeeTransmission(package, loggerAddress)) {
 				// Print transmission to the debugger
 				string message = "Sent the following message (" + floatTemp.ToString("F") + ", " + luminosity.ToString("F") + ", " + power.ToString("F") + ", " + relayStatus.ToString("F0") + ", " + thermoStatus.ToString("F0") + "): ";
 				for(int i = 0; i < package.Length; i++) {
@@ -381,7 +395,7 @@ namespace RelayControllerTest {
 			} else {
 				Debug.Print("Error sending the sensor data");
 				// TODO - DEVELOP CODE TO SAVE TO THE DATA LOGGER
-			}
+			}*/
 		}
 
 		//=====================================================================
