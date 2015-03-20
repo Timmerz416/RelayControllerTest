@@ -217,7 +217,7 @@ namespace RelayControllerTest {
 				}
 			}
 			else if(command[0] == CMD_THERMO_POWER) {	// Command sent to power on/off the thermostat
-				Debug.Print("Received command to change themrostat power status to " + (command[1] == STATUS_ON ? "ON" : "OFF") + " - NOT IMPLEMENTED IN HARDWARE");
+				Debug.Print("Received command to change thermostat power status to " + (command[1] == STATUS_ON ? "ON" : "OFF") + " - NOT IMPLEMENTED IN HARDWARE");
 				dataPacket = new byte[] { CMD_THERMO_POWER, CMD_ACK };	// Acknowledge the command
 				//-----------------------------------------------------------------
 			} else if(command[0] == CMD_OVERRIDE) {	// Command to turn on/off the override and set the target temperature
