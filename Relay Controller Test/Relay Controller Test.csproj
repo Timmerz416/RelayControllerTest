@@ -36,6 +36,7 @@
   <ItemGroup>
     <Compile Include="I2CBreakout.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RelaySensors.cs" />
     <Compile Include="RelayTest.cs" />
     <Compile Include="TemperatureRule.cs" />
   </ItemGroup>

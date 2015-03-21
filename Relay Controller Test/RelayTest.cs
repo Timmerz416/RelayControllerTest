@@ -19,8 +19,6 @@ namespace RelayControllerTest {
 		//=====================================================================
 		// Analog input ports
 		private static AnalogInput pwrInput = new AnalogInput(AnalogChannels.ANALOG_PIN_A0);	// Analog input to read thermostat power status
-		private static AnalogInput tmpInput = new AnalogInput(AnalogChannels.ANALOG_PIN_A1);	// Analog input to read temperature
-		private static AnalogInput lumInput = new AnalogInput(AnalogChannels.ANALOG_PIN_A2);	// Analog input to read the luminosity
 
 		// Digital output ports
 		private static OutputPort pwrStatusOutput = new OutputPort(Pins.GPIO_PIN_D8, false);		// Output port for power led
@@ -87,6 +85,11 @@ namespace RelayControllerTest {
 		private static XBeeApi xBee;				// The object controlling the interface to the XBee radio
 		private static bool xbeeConnected = false;	// A flag to indicate there is a connection to the XBee (true) or not (false)
 		const string COORD_ADDRESS = "00 00 00 00 00 00 00 00";	// The address of the coordinator
+
+		//=====================================================================
+		// SENSOR SETUP
+		//=====================================================================
+		private static HTU21DSensor tempSensor = new HTU21DSensor();
 
 		//=====================================================================
 		// MAIN PROGRAM
@@ -346,10 +349,11 @@ namespace RelayControllerTest {
 			// GET ANY DATA FOR THE TRANSMISSION
 			//-----------------------------------------------------------------
 			// Get temperature
-			float floatTemp = (temperature == TEMP_UNDEFINED) ? 100f*(3.3f*((float) tmpInput.Read()) - 0.5f) : (float) temperature;	// Convert double to float
+			float floatTemp = (temperature == TEMP_UNDEFINED) ? (float) tempSensor.readTemperature() : (float) temperature;	// Convert double to float
 
 			// Get luminosity
-			float luminosity = 3.3f*((float) lumInput.Read());
+			//float luminosity = 3.3f*((float) lumInput.Read());
+			float luminosity = 0.0f;
 
 			// Get status indicators
 			float power = 3.3f;
@@ -436,7 +440,7 @@ namespace RelayControllerTest {
 			// COLLECT CONTROL CONDITIONS
 			//-----------------------------------------------------------------
 			// Get the tempeature reading
-			double temperature = 100.0*(3.3*tmpInput.Read() - 0.5);
+			double temperature = tempSensor.readTemperature();
 
 			// Get the time and weekday for evaluating the rules
 			double curTime = DateTime.Now.Hour + DateTime.Now.Minute/60.0 + DateTime.Now.Second/3600.0;

@@ -10,29 +10,35 @@ namespace RelayControllerTest {
 	/// <summary>
 	/// Base class for I2C device communications based on the code in http://blog.codeblack.nl/post/NetDuino-Getting-Started-with-I2C.aspx
 	/// </summary>
-	class I2CBreakout {
-		private const int DefaultClockRate = 400;
-		private const int TransactionTimeout = 1000;
+	public class I2CBreakout : IDisposable {
+		//=====================================================================
+		// CLASS CONSTANTS
+		//=====================================================================
+		private const int DEFAULT_CLOCK_RATE = 400;		// Default clock rate in kHz
+		private const int TRANSACTION_TIMEOUT = 1000;	// Default transaction wait time in ms
  
-		private I2CDevice.Configuration i2cConfig;
-		private I2CDevice i2cDevice;
+		//=====================================================================
+		// CLASS MEMBERS
+		//=====================================================================
+		private I2CDevice.Configuration _i2cConfig;	// Stores the configuration for the device
+		private I2CDevice _i2cDevice;				// The object to interact with the I2C device
  
-		public byte Address { get; private set; }
+		public byte Address { get; private set; }	// The address of the device on the I2C bus
  
-		public I2CBreakout(byte address, int clockRateKhz) {
+		public I2CBreakout(byte address, int clockRatekHz) {
 			this.Address = address;
-			this.i2cConfig = new I2CDevice.Configuration(this.Address, clockRateKhz);
-			this.i2cDevice = new I2CDevice(this.i2cConfig);
+			this._i2cConfig = new I2CDevice.Configuration(this.Address, clockRatekHz);
+			this._i2cDevice = new I2CDevice(this._i2cConfig);
 		}
 
-		public I2CBreakout(byte address) : this(address, DefaultClockRate) { }
+		public I2CBreakout(byte address) : this(address, DEFAULT_CLOCK_RATE) { }
  
-		private void Write(byte[] writeBuffer) {
+		protected void Write(byte[] writeBuffer) {
 			// create a write transaction containing the bytes to be written to the device
 			I2CDevice.I2CTransaction[] writeTransaction = new I2CDevice.I2CTransaction[] {  I2CDevice.CreateWriteTransaction(writeBuffer)  };
  
 			// write the data to the device
-			int written = this.i2cDevice.Execute(writeTransaction, TransactionTimeout);
+			int written = this._i2cDevice.Execute(writeTransaction, TRANSACTION_TIMEOUT);
  
 			while (written < writeBuffer.Length) {
 				byte[] newBuffer = new byte[writeBuffer.Length - written];
@@ -40,24 +46,24 @@ namespace RelayControllerTest {
  
 				writeTransaction = new I2CDevice.I2CTransaction[] {  I2CDevice.CreateWriteTransaction(newBuffer)  };
  
-				written += this.i2cDevice.Execute(writeTransaction, TransactionTimeout);
+				written += this._i2cDevice.Execute(writeTransaction, TRANSACTION_TIMEOUT);
 			}
  
 			// make sure the data was sent
 			if (written != writeBuffer.Length)
-				throw new Exception("Could not write to device.");
+				throw new I2CException("Could not write to device.");
 		}
 
-		private void Read(byte[] readBuffer) {
+		protected void Read(byte[] readBuffer) {
 			// create a read transaction
 			I2CDevice.I2CTransaction[] readTransaction = new I2CDevice.I2CTransaction[] {  I2CDevice.CreateReadTransaction(readBuffer)  };
  
 			// read data from the device
-			int read = this.i2cDevice.Execute(readTransaction, TransactionTimeout);
+			int read = this._i2cDevice.Execute(readTransaction, TRANSACTION_TIMEOUT);
  
 			// make sure the data was read
 			if (read != readBuffer.Length)
-				throw new Exception("Could not read from device.");
+				throw new I2CException("Could not read from device.");
 		}
  
 		protected void WriteToRegister(byte register, byte value) {
@@ -77,5 +83,19 @@ namespace RelayControllerTest {
 			this.Write(new byte[] { register });          
 			this.Read(readBuffer);
 		}
+
+		public void Dispose() {
+			_i2cDevice.Dispose();
+		}
+	}
+
+	//=========================================================================
+	// I2CException Class
+	//=========================================================================
+	public class I2CException : Exception {
+		//=====================================================================
+		// Basic Constructor
+		//=====================================================================
+		public I2CException(string message) : base(message) { }
 	}
 }
