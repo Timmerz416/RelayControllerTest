@@ -1,35 +1,65 @@
 using System;
 using Microsoft.SPOT;
+using Microsoft.SPOT.Hardware;
 using System.Threading;
 
 namespace RelayControllerTest {
+	//=========================================================================
+	// BasicI2CBusSensor Class
+	//=========================================================================
+	class BasicI2CBusSensor : I2CBus {
+		//=====================================================================
+		// CLASS MEMBERS
+		//=====================================================================
+		// I2C device configuration properties
+		public I2CDevice.Configuration _config;
+
+		//=====================================================================
+		// Class Constructor
+		//=====================================================================
+		public BasicI2CBusSensor(ushort address, int clockSpeed) : base() {
+			_config = new I2CDevice.Configuration(address, clockSpeed);
+		}
+
+		//=====================================================================
+		// Write Override
+		//=====================================================================
+		protected void Write(byte[] writeBuffer, int transactionTimeout = DEFAULT_TIMEOUT) {
+			base.Write(_config, writeBuffer, transactionTimeout);
+		}
+
+		//=====================================================================
+		// Read Override
+		//=====================================================================
+		protected void Read(byte[] readBuffer, int transactionTimeout = DEFAULT_TIMEOUT) {
+			base.Read(_config, readBuffer, transactionTimeout);
+		}
+	}
 
 	//=========================================================================
-	// HTU21DSensor Class
+	// HTU21DBusSensor
 	//=========================================================================
-	/// <summary>
-	/// Implementation of the I2C protocal for a HTU21D sensor, specifically the Sparkfun one.
-	/// </summary>
-	class HTU21DSensor : I2CBreakout {
+	class HTU21DBusSensor : BasicI2CBusSensor {
 		//=====================================================================
 		// CLASS CONSTANTS
 		//=====================================================================
-		// The address of the sensor
-		private const int BUS_ADDRESS = 0x40;
+		// Set bus device properties
+		private const ushort BUS_ADDRESS = 0x40;
+		private const int CLOCK_SPEED = 400;
 
 		// The HTU21D Commands
-		private const byte MEASURE_TEMPERATURE_HOLD		= 0xe3;
-		private const byte MEASURE_TEMPERATURE_NOHOLD	= 0xf3;
-		private const byte MEASURE_HUMIDITY_HOLD		= 0xe5;
-		private const byte MEASURE_HUMIDITY_NOHOLD		= 0xf5;
-		private const byte WRITE_USER_REGISTER			= 0xe6;
-		private const byte READ_USER_REGISTER			= 0xe7;
-		private const byte SOFT_RESET					= 0xfe;
+		private const byte MEASURE_TEMPERATURE_HOLD		= 0xE3;
+		private const byte MEASURE_TEMPERATURE_NOHOLD	= 0xF3;
+		private const byte MEASURE_HUMIDITY_HOLD		= 0xE5;
+		private const byte MEASURE_HUMIDITY_NOHOLD		= 0xF5;
+		private const byte WRITE_USER_REGISTER			= 0xE6;
+		private const byte READ_USER_REGISTER			= 0xE7;
+		private const byte SOFT_RESET					= 0xFE;
 
 		//=====================================================================
-		// Default Constructor
+		// Class Constructor
 		//=====================================================================
-		public HTU21DSensor() : base(BUS_ADDRESS) { }
+		public HTU21DBusSensor() : base(BUS_ADDRESS, CLOCK_SPEED) { }
 
 		//=====================================================================
 		// readTemperature
@@ -88,5 +118,22 @@ namespace RelayControllerTest {
 			if(statusBits == 2) return 125.0*((double) rawHumidity)/65536.0 - 6.0;
 			else throw new I2CException("Temperature measurement returns when requesting humidity measurement");
 		}
+	}
+
+	//=========================================================================
+	// TSL2561BusSensor
+	//=========================================================================
+	class TSL2561BusSensor : BasicI2CBusSensor {
+		//=====================================================================
+		// CLASS CONSTANTS
+		//=====================================================================
+		// Set bus device properties
+		private const ushort BUS_ADDRESS = 0x39;
+		private const int CLOCK_SPEED = 100;
+
+		//=====================================================================
+		// Class Constructor
+		//=====================================================================
+		public TSL2561BusSensor() : base(BUS_ADDRESS, CLOCK_SPEED) { }
 	}
 }

@@ -89,7 +89,8 @@ namespace RelayControllerTest {
 		//=====================================================================
 		// SENSOR SETUP
 		//=====================================================================
-		private static HTU21DSensor tempSensor = new HTU21DSensor();
+		private static HTU21DBusSensor tempSensor = new HTU21DBusSensor();
+		private static TSL2561BusSensor luxSensor = new TSL2561BusSensor();
 
 		//=====================================================================
 		// MAIN PROGRAM
