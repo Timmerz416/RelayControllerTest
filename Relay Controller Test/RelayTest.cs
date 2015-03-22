@@ -350,10 +350,16 @@ namespace RelayControllerTest {
 			//-----------------------------------------------------------------
 			// Get temperature
 			float floatTemp = (temperature == TEMP_UNDEFINED) ? (float) tempSensor.readTemperature() : (float) temperature;	// Convert double to float
+			Debug.Print("\tMeasured temperature = " + floatTemp);
 
 			// Get luminosity
 			//float luminosity = 3.3f*((float) lumInput.Read());
 			float luminosity = 0.0f;
+			Debug.Print("\tMeasured luminosity = " + luminosity);
+
+			// Get humidity
+			float humidity = (float) tempSensor.readHumidity();
+			Debug.Print("\tMeasured humidity = " + humidity);
 
 			// Get status indicators
 			float power = 3.3f;
@@ -364,9 +370,10 @@ namespace RelayControllerTest {
 			// CREATE THE BYTE ARRAYS AND TRANSMISSION PACKAGE
 			//-----------------------------------------------------------------
 			// Convert the floats to byte arrays
-			byte[] tempBytes, luxBytes, powerBytes, thermoBytes, relayBytes;
+			byte[] tempBytes, luxBytes, humidityBytes, powerBytes, thermoBytes, relayBytes;
 			tempBytes = FloatToByte(floatTemp);
 			luxBytes = FloatToByte(luminosity);
+			humidityBytes = FloatToByte(humidity);
 			powerBytes = FloatToByte(power);
 			thermoBytes = FloatToByte(thermoStatus);
 			relayBytes = FloatToByte(relayStatus);
@@ -374,21 +381,23 @@ namespace RelayControllerTest {
 			// Allocate the data package
 			int floatSize = sizeof(float);
 			Debug.Assert(floatSize == 4);
-			byte[] package = new byte[5*(floatSize+1) + 1];	// Allocate memory for the package
+			byte[] package = new byte[6*(floatSize+1) + 1];	// Allocate memory for the package
 
 			// Create the package of data
 			package[0] = CMD_SENSOR_DATA;	// Indicate the package contains sensor data
 			package[1] = TEMPERATURE_CODE;
 			package[(floatSize+1)+1] = LUX_CODE;
-			package[2*(floatSize+1)+1] = POWER_CODE;
-			package[3*(floatSize+1)+1] = HEATING_CODE;
-			package[4*(floatSize+1)+1] = THERMOSTAT_CODE;
+			package[2*(floatSize+1)+1] = HUMIDITY_CODE;
+			package[3*(floatSize+1)+1] = POWER_CODE;
+			package[4*(floatSize+1)+1] = HEATING_CODE;
+			package[5*(floatSize+1)+1] = THERMOSTAT_CODE;
 			for(int i = 0; i < floatSize; i++) {
 				package[i+2] = tempBytes[i];
 				package[(floatSize+1)+(i+2)] = luxBytes[i];
-				package[2*(floatSize+1)+(i+2)] = powerBytes[i];
-				package[3*(floatSize+1)+(i+2)] = relayBytes[i];
-				package[4*(floatSize+1)+(i+2)] = thermoBytes[i];
+				package[2*(floatSize+1)+(i+2)] = humidityBytes[i];
+				package[3*(floatSize+1)+(i+2)] = powerBytes[i];
+				package[4*(floatSize+1)+(i+2)] = relayBytes[i];
+				package[5*(floatSize+1)+(i+2)] = thermoBytes[i];
 			}
 
 			//-----------------------------------------------------------------
