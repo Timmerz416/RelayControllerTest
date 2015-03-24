@@ -219,13 +219,26 @@ namespace RelayControllerTest {
 		public TSL2561BusSensor() : base(BUS_ADDRESS, CLOCK_SPEED) { }
 
 		//=====================================================================
+		// ReadWord
+		//=====================================================================
+		private UInt16 ReadWord(Registers source) {
+			// Create the command and response data variables
+			byte command = (byte) ((byte) CommandOptions.CommandBit | (byte) CommandOptions.WordBit | (byte) source);
+			byte[] response = new byte[2];	// Contains the word as 2 bytes
+			UInt16 word = 0;	// The final word
+
+			// Get the word and convert to an integer
+			ReadRegister(command, response);
+			word = (UInt16) ((UInt16) response[0] << 8 | (UInt16) response[1]);
+
+			return word;
+		}
+
+		//=====================================================================
 		// PowerSensor
 		//=====================================================================
-		private void PowerSensor() {
-			//-----------------------------------------------------------------
+		private void EnableSensor() {
 			// Power up the sensor
-			//-----------------------------------------------------------------
-			// Create the command and issue it
 			byte command = (byte) CommandOptions.CommandBit | (byte) Registers.Control;
 			WriteRegister(command, (byte) PowerOptions.On);
 		}
@@ -233,10 +246,8 @@ namespace RelayControllerTest {
 		//=====================================================================
 		// HibernateSensor
 		//=====================================================================
-		private void HibernateSensor() {
-			//-----------------------------------------------------------------
+		private void DisableSensor() {
 			// Turn off sensor power
-			//-----------------------------------------------------------------
 			byte command = (byte) CommandOptions.CommandBit | (byte) Registers.Control;
 			WriteRegister(command, (byte) PowerOptions.Off);
 		}
@@ -245,10 +256,14 @@ namespace RelayControllerTest {
 		// SetTiming
 		//=====================================================================
 		public void SetTiming(GainOptions gain, IntegrationOptions integration) {
-			// Set the command and issue
+			// Set the commands
 			byte command = (byte) CommandOptions.CommandBit | (byte) Registers.Timing;
 			byte options = (byte) ((byte) gain | (byte) integration);
+
+			// Write the timing information
+			EnableSensor();
 			WriteRegister(command, options);
+			DisableSensor();
 		}
 	}
 }
