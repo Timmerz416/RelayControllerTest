@@ -34,6 +34,27 @@ namespace RelayControllerTest {
 		protected void Read(byte[] readBuffer, int transactionTimeout = DEFAULT_TIMEOUT) {
 			base.Read(_config, readBuffer, transactionTimeout);
 		}
+
+		//=====================================================================
+		// ReadRegister Override
+		//=====================================================================
+		protected void ReadRegister(byte register, byte[] readBuffer, int transactionTimeout = DEFAULT_TIMEOUT) {
+			base.ReadRegister(_config, register, readBuffer, transactionTimeout);
+		}
+
+		//=====================================================================
+		// WriteRegister - Array of Bytes
+		//=====================================================================
+		protected void WriteRegister(byte register, byte[] writeBuffer, int transactionTimeout = DEFAULT_TIMEOUT) {
+			base.WriteRegister(_config, register, writeBuffer, transactionTimeout);
+		}
+
+		//=====================================================================
+		// WriteRegister - Single Byte
+		//=====================================================================
+		protected void WriteRegister(byte register, byte writeBuffer, int transactionTimeout = DEFAULT_TIMEOUT) {
+			base.WriteRegister(_config, register, writeBuffer, transactionTimeout);
+		}
 	}
 
 	//=========================================================================
@@ -59,11 +80,18 @@ namespace RelayControllerTest {
 		//=====================================================================
 		// Class Constructor
 		//=====================================================================
+		/// <summary>
+		/// Set the address of the humidity sensor and set the clock speed
+		/// </summary>
 		public HTU21DBusSensor() : base(BUS_ADDRESS, CLOCK_SPEED) { }
 
 		//=====================================================================
 		// readTemperature
 		//=====================================================================
+		/// <summary>
+		/// Read the temperature from the humidity sensor
+		/// </summary>
+		/// <returns>The measured temperature in Celsius</returns>
 		public double readTemperature() {
 			//-----------------------------------------------------------------
 			// Implement the No Hold approach
@@ -93,6 +121,10 @@ namespace RelayControllerTest {
 		//=====================================================================
 		// readHumidity
 		//=====================================================================
+		/// <summary>
+		/// Read the humidity from the sensor
+		/// </summary>
+		/// <returns>The measured humidity in relative percent</returns>
 		public double readHumidity() {
 			//-----------------------------------------------------------------
 			// Implement the No Hold approach
@@ -132,8 +164,91 @@ namespace RelayControllerTest {
 		private const int CLOCK_SPEED = 100;
 
 		//=====================================================================
+		// CLASS ENUMERATIONS
+		//=====================================================================
+		// Registers for TSL2561
+		private enum Registers {
+			Control				= 0x0,	// Control of basic functions
+			Timing				= 0x1,	// Integration time/gain control
+			ThresholdLowLow		= 0x2,	// Low byte of low interrupt threshold
+			ThresholdLowHigh	= 0x3,	// High byte of low interrupt threshold
+			ThresholdHighLow	= 0x4,	// Low byte of high interrupt threshold
+			ThresholdHighHigh	= 0x5,	// High byte of high interrupt threshold
+			Interrupt			= 0x6,	// Interrupt control
+			ID					= 0xA,	// Part number / revision ID
+			Data0Low			= 0xC,	// Low byte of ADC Channel 0
+			Data0High			= 0xD,	// High byte of ADC Channel 0
+			Data1Low			= 0xE,	// Low byte of ADC Channel 1
+			Data1High			= 0xF	// High byte of ADC Channel 1
+		}
+
+		// Command options
+		private enum CommandOptions {
+			CommandBit	= 0x80,	// Identify the transaction as a command
+			ClearBit	= 0x40,	// Clears pending interrupts
+			WordBit		= 0x20,	// Indicates if a work (two bytes) are to be read/written to the device
+			BlockBit	= 0x10	// Turn on blocking (1) or off (0)
+		}
+
+		// Device power options
+		private enum PowerOptions {
+			Off	= 0x00,	// Power down the device
+			On	= 0x03	// Power up the device
+		}
+
+		// Gain options
+		public enum GainOptions {
+			Low		= 0x00,	// Low (x1) gain setting
+			High	= 0x10	// High (x16) gain setting
+		}
+
+		// Integration time options
+		public enum IntegrationOptions {
+			Short	= 0x0,	// Shortest, 13.7 ms integration window
+			Medium	= 0x1,	// Middle, 101 ms integration window
+			Long	= 0x2,	// Longest 402 ms integration window
+			Manual	= 0x8	// Manual integration window
+		}
+
+		//=====================================================================
 		// Class Constructor
 		//=====================================================================
+		/// <summary>
+		/// Set the address of the luminosity sensor and set the clock speed
+		/// </summary>
 		public TSL2561BusSensor() : base(BUS_ADDRESS, CLOCK_SPEED) { }
+
+		//=====================================================================
+		// PowerSensor
+		//=====================================================================
+		private void PowerSensor() {
+			//-----------------------------------------------------------------
+			// Power up the sensor
+			//-----------------------------------------------------------------
+			// Create the command and issue it
+			byte command = (byte) CommandOptions.CommandBit | (byte) Registers.Control;
+			WriteRegister(command, (byte) PowerOptions.On);
+		}
+
+		//=====================================================================
+		// HibernateSensor
+		//=====================================================================
+		private void HibernateSensor() {
+			//-----------------------------------------------------------------
+			// Turn off sensor power
+			//-----------------------------------------------------------------
+			byte command = (byte) CommandOptions.CommandBit | (byte) Registers.Control;
+			WriteRegister(command, (byte) PowerOptions.Off);
+		}
+
+		//=====================================================================
+		// SetTiming
+		//=====================================================================
+		public void SetTiming(GainOptions gain, IntegrationOptions integration) {
+			// Set the command and issue
+			byte command = (byte) CommandOptions.CommandBit | (byte) Registers.Timing;
+			byte options = (byte) ((byte) gain | (byte) integration);
+			WriteRegister(command, options);
+		}
 	}
 }
