@@ -355,8 +355,8 @@ namespace RelayControllerTest {
 
 			// Get luminosity
 			//float luminosity = 3.3f*((float) lumInput.Read());
-			luxSensor.SetTiming(TSL2561BusSensor.GainOptions.High, TSL2561BusSensor.IntegrationOptions.Short);	// Test
-			float luminosity = 0.0f;
+			luxSensor.SetTiming(TSL2561BusSensor.GainOptions.Low, TSL2561BusSensor.IntegrationOptions.Medium);
+			float luminosity = (float) luxSensor.readOptimizedLuminosity();
 			Debug.Print("\tMeasured luminosity = " + luminosity);
 
 			// Get humidity

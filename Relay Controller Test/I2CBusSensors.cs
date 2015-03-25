@@ -163,6 +163,9 @@ namespace RelayControllerTest {
 		private const ushort BUS_ADDRESS = 0x39;
 		private const int CLOCK_SPEED = 100;
 
+		// Measurement erros
+		public const double LUX_ERROR = -1.0;
+
 		//=====================================================================
 		// CLASS ENUMERATIONS
 		//=====================================================================
@@ -206,9 +209,40 @@ namespace RelayControllerTest {
 		public enum IntegrationOptions {
 			Short	= 0x0,	// Shortest, 13.7 ms integration window
 			Medium	= 0x1,	// Middle, 101 ms integration window
-			Long	= 0x2,	// Longest 402 ms integration window
-			Manual	= 0x8	// Manual integration window
+			Long	= 0x2	// Longest 402 ms integration window
 		}
+
+		// Data channel options
+		private enum Channels {
+			Channel0,	// The visible + infrared sensor
+			Channel1	// The infrared sensor
+		}
+
+		//=====================================================================
+		// Internal Class
+		//=====================================================================
+		private class SensorException : Exception {
+			// Enums
+			public enum SignalError {
+				Low,
+				Saturated
+			}
+
+			// Members
+			public SignalError Error { get; set; }
+
+			// Constructor
+			public SensorException(SignalError error) : base("Luminosity sensor signal error") {
+				// Copy error type
+				Error = error;
+			}
+		}
+
+		//=====================================================================
+		// Class Members
+		//=====================================================================
+		GainOptions _gain;
+		IntegrationOptions _intPeriod;
 
 		//=====================================================================
 		// Class Constructor
@@ -216,7 +250,16 @@ namespace RelayControllerTest {
 		/// <summary>
 		/// Set the address of the luminosity sensor and set the clock speed
 		/// </summary>
-		public TSL2561BusSensor() : base(BUS_ADDRESS, CLOCK_SPEED) { }
+		public TSL2561BusSensor() : base(BUS_ADDRESS, CLOCK_SPEED) {
+			// Determine the current timing settings
+			byte command = (byte) CommandOptions.CommandBit | (byte) Registers.Timing;
+			byte[] options = new byte[1];	// Will hold registry values
+			ReadRegister(command, options);
+
+			// Determine the timing settings
+			_gain = (GainOptions) (options[0] & (byte) GainOptions.High);
+			_intPeriod = (IntegrationOptions) (options[0] & 0x03);
+		}
 
 		//=====================================================================
 		// ReadWord
@@ -232,6 +275,33 @@ namespace RelayControllerTest {
 			word = (UInt16) ((UInt16) response[0] << 8 | (UInt16) response[1]);
 
 			return word;
+		}
+
+		//=====================================================================
+		// GetChannelData - only for preset integration times
+		//=====================================================================
+		private UInt16 GetChannelData(Channels channel) {
+			// Enable the sensor, and wait for integration time
+			EnableSensor();
+			switch(_intPeriod) {
+				case IntegrationOptions.Short:
+					Thread.Sleep(20);	// Sleep for 20 ms	(6 ms extra)
+					break;
+				case IntegrationOptions.Medium:
+					Thread.Sleep(110);	// Sleep for 110 ms (9 ms extra)
+					break;
+				default:
+					Thread.Sleep(410);	// Sleep for 410 ms (8 ms extra)
+					break;
+			}
+
+			// Read the data and disable the sensor
+			UInt16 signal = 0;
+			if(channel == Channels.Channel0) signal = ReadWord(Registers.Data0Low);
+			else signal = ReadWord(Registers.Data1Low);
+			DisableSensor();
+
+			return signal;
 		}
 
 		//=====================================================================
@@ -264,6 +334,108 @@ namespace RelayControllerTest {
 			EnableSensor();
 			WriteRegister(command, options);
 			DisableSensor();
+
+			// Update the object
+			_gain = gain;
+			_intPeriod = integration;
+		}
+
+		//=====================================================================
+		// readLuminosity
+		//=====================================================================
+		public double readLuminosity(bool lowSignalCheck = false) {
+			//-----------------------------------------------------------------
+			// Read the sensor measurements
+			//-----------------------------------------------------------------
+			// Initialize values
+			double luminosity = LUX_ERROR;
+
+			// Get the measured luminosity in both channels
+			UInt16 chan0 = GetChannelData(Channels.Channel0);
+			UInt16 chan1 = GetChannelData(Channels.Channel1);
+
+			// Sensor signal checks
+			if((chan0 == 0xFFFF) || (chan1 == 0xFFFF)) throw new SensorException(SensorException.SignalError.Saturated);	// Check for sensor saturation
+			if(lowSignalCheck && ((chan0 < 10) || (chan1 < 10))) throw new SensorException(SensorException.SignalError.Low);	// Check for low signal
+
+			//-----------------------------------------------------------------
+			// Determine scaling
+			//-----------------------------------------------------------------
+			double scale;
+
+			// First, account for integration time
+			switch(_intPeriod) {
+				case IntegrationOptions.Short:
+					scale = 402.0/13.7;
+					break;
+				case IntegrationOptions.Medium:
+					scale = 402.0/101.0;
+					break;
+				default:
+					scale = 1.0;
+					break;
+			}
+
+			// Adjust for gain
+			if(_gain == GainOptions.Low) scale *= 16.0;
+
+			//-----------------------------------------------------------------
+			// Calculate luminosity
+			//-----------------------------------------------------------------
+			// Scale the readings
+			double d0 = scale*chan0;
+			double d1 = scale*chan1;
+
+			// Calculation from the TSL2561 datasheet
+			double ratio = (double) chan1 / (double) chan0;
+			if(ratio <= 0.5) luminosity = 0.0304*d0 - 0.062*System.Math.Pow(ratio, 1.4)*d1;
+			else if(ratio <= 0.61) luminosity = 0.0224*d0 - 0.031*d1;
+			else if(ratio <= 0.8) luminosity = 0.0128*d0 - 0.0153*d1;
+			else if(ratio <= 1.3) luminosity = 0.00146*d0 - 0.00112*d1;
+			else luminosity = 0.0;
+
+			return luminosity;
+		}
+
+		//=====================================================================
+		// readOptimizedLuminosity
+		//=====================================================================
+		public double readOptimizedLuminosity() {
+			// Initialize values
+			double luminosity = LUX_ERROR;
+			bool luxCaptured = false;
+
+			//-----------------------------------------------------------------
+			// Loop until the best representation of the luminosity found
+			//-----------------------------------------------------------------
+			while(!luxCaptured) {
+				// Get the measured luminosity
+				try {
+					luminosity = readLuminosity(true);
+					luxCaptured = true;
+				} catch(SensorException sensorResponse) {
+					// Determine timing adjustments
+					if(sensorResponse.Error == SensorException.SignalError.Saturated) {
+						// Sensor saturated, so adjust timing
+						if(_gain == GainOptions.High) _gain = GainOptions.Low;	// Lower the gain
+						else if((int) _intPeriod > 0) --_intPeriod;	// Reduce the integration time
+						else luxCaptured = true;	// Can't make any further adjustments
+					} else {
+						// Low signal, so again try adjusting timing
+						if((int) _intPeriod < 2) ++_intPeriod;	// Increase the integration time
+						else if(_gain == GainOptions.Low) _gain = GainOptions.High;	// Increase the gain
+						else {
+							luminosity = readLuminosity();	// The measured value is the best on
+							luxCaptured = true;
+						}
+					}
+
+					// Make adjustments if needed
+					if(!luxCaptured) SetTiming(_gain, _intPeriod);	// A bit crude, but fine for now
+				}
+			}
+
+			return luminosity;
 		}
 	}
 }
