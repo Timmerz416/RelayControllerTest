@@ -272,7 +272,7 @@ namespace RelayControllerTest {
 
 			// Get the word and convert to an integer
 			ReadRegister(command, response);
-			word = (UInt16) ((UInt16) response[0] << 8 | (UInt16) response[1]);
+			word = (UInt16) ((UInt16) response[1] << 8 | (UInt16) response[0]);
 
 			return word;
 		}
@@ -388,7 +388,7 @@ namespace RelayControllerTest {
 
 			// Calculation from the TSL2561 datasheet
 			double ratio = (double) chan1 / (double) chan0;
-			if(ratio <= 0.5) luminosity = 0.0304*d0 - 0.062*System.Math.Pow(ratio, 1.4)*d1;
+			if(ratio <= 0.5) luminosity = 0.0304*d0 - 0.062*System.Math.Pow(ratio, 1.4)*d0;
 			else if(ratio <= 0.61) luminosity = 0.0224*d0 - 0.031*d1;
 			else if(ratio <= 0.8) luminosity = 0.0128*d0 - 0.0153*d1;
 			else if(ratio <= 1.3) luminosity = 0.00146*d0 - 0.00112*d1;
