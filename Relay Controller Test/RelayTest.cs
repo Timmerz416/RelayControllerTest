@@ -91,6 +91,7 @@ namespace RelayControllerTest {
 		//=====================================================================
 		private static HTU21DBusSensor tempSensor = new HTU21DBusSensor();
 		private static TSL2561BusSensor luxSensor = new TSL2561BusSensor();
+		private static DS1307BusSensor timeKeeper = new DS1307BusSensor();
 
 		//=====================================================================
 		// MAIN PROGRAM
@@ -100,7 +101,8 @@ namespace RelayControllerTest {
 			// INITIALIZE THE TIME, RADIOS, TIMERS AND RULES
 			//-----------------------------------------------------------------
 			// Set the time on the netduino
-			Utility.SetLocalTime(new DateTime(2015, 2, 22, 9, 0, 0));
+//			timeKeeper.SetTime(new DS1307BusSensor.RTCTime(0, 34, 23, 26, 3, 15, DS1307BusSensor.DayOfWeek.Thursday));
+			Utility.SetLocalTime(timeKeeper.GetTime().getDateTime());
 
 			// Initialize the XBee
 			Debug.Print("Initializing XBee...");
@@ -456,7 +458,7 @@ namespace RelayControllerTest {
 			// Get the time and weekday for evaluating the rules
 			double curTime = DateTime.Now.Hour + DateTime.Now.Minute/60.0 + DateTime.Now.Second/3600.0;
 			RuleDays curWeekday = (RuleDays) ((int) DateTime.Now.DayOfWeek);	// Cast the returned DayOfWeek enum into the custome DayType enum
-			Debug.Print("Evaluating relay status on a " + curWeekday + " at " + curTime.ToString("F4") + " with measured temperature at " + temperature.ToString("F") + ": ");
+			Debug.Print("Evaluating relay status on a " + curWeekday + " (" + DateTime.Now.ToString("dddd") + ") at " + curTime.ToString("F4") + " with measured temperature at " + temperature.ToString("F") + ": ");
 
 			//-----------------------------------------------------------------
 			// TEMPERATURE LIMITS CHECK

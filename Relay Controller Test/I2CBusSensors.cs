@@ -438,4 +438,106 @@ namespace RelayControllerTest {
 			return luminosity;
 		}
 	}
+
+	//=========================================================================
+	// DS1307BusSensor
+	//=========================================================================
+	class DS1307BusSensor : BasicI2CBusSensor {
+		//=====================================================================
+		// CLASS CONSTANTS
+		//=====================================================================
+		// Set bus device properties
+		private const ushort BUS_ADDRESS = 0x68;
+		private const int CLOCK_SPEED = 100;
+
+		//=====================================================================
+		// CLASS ENUMERATIONS
+		//=====================================================================
+		public enum DayOfWeek { Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday };
+		
+		//=====================================================================
+		// Class Structures
+		//=====================================================================
+		public struct RTCTime {
+			public byte second;
+			public byte minute;
+			public byte hour;
+			public byte day;
+			public byte month;
+			public byte year;
+			public byte weekday;
+
+			public RTCTime(byte ss, byte mm, byte hh, byte dd, byte MM, byte yy, DayOfWeek wd) {
+				second = ss;
+				minute = mm;
+				hour = hh;
+				day = dd;
+				month = MM;
+				year = yy;
+				weekday = (byte) wd;
+			}
+
+			public DateTime getDateTime() {
+				return new DateTime(2000 + year, month, day, hour, minute, second);
+			}
+		}
+
+		//=====================================================================
+		// Class Constructor
+		//=====================================================================
+		/// <summary>
+		/// Set the address of the real time clock and set the clock speed
+		/// </summary>
+		public DS1307BusSensor() : base(BUS_ADDRESS, CLOCK_SPEED) { }
+
+		//=====================================================================
+		// ToBCD
+		//=====================================================================
+		private static byte ToBCD(byte value) {
+			return (byte) ((value/10 << 4) + value % 10);
+		}
+
+		//=====================================================================
+		// FromBCD
+		//=====================================================================
+		private static byte FromBCD(byte value) {
+			// Get the components of the value
+			int low = value & 0x0F;
+			int high = (value & 0x70) >> 4;
+			return (byte) (10*high + low);
+		}
+
+		//=====================================================================
+		// SetTime
+		//=====================================================================
+		public void SetTime(RTCTime timeStruct) {
+			// Create array to set the time
+			byte[] timeArray = new byte[] {
+				0x00,	// Stop oscillator
+				ToBCD(timeStruct.second),
+				ToBCD(timeStruct.minute),
+				ToBCD(timeStruct.hour),
+				ToBCD((byte) (timeStruct.weekday + 1)),
+				ToBCD(timeStruct.day),
+				ToBCD(timeStruct.month),
+				ToBCD(timeStruct.year),
+				0x00	// Restart oscillator
+			};
+
+			// Write the time
+			WriteRegister(0x00, timeArray);
+		}
+
+		//=====================================================================
+		// GetTime
+		//=====================================================================
+		public RTCTime GetTime() {
+			// Create array to receive the time, and get the time
+			byte[] timeArray = new byte[7];
+			ReadRegister(0x00, timeArray);
+
+			// Copy the array to the return object
+			return new RTCTime(FromBCD((byte) (timeArray[0] & 0x7F)), FromBCD(timeArray[1]), FromBCD((byte) (timeArray[2] & 0x3F)), FromBCD(timeArray[4]), FromBCD(timeArray[5]), FromBCD(timeArray[6]), (DayOfWeek) FromBCD((byte) (timeArray[3] - 1)));
+		}
+	}
 }
