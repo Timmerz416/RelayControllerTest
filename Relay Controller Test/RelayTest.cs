@@ -69,6 +69,7 @@ namespace RelayControllerTest {
 		const byte CMD_OVERRIDE		= 2;
 		const byte CMD_RULE_CHANGE	= 3;
 		const byte CMD_SENSOR_DATA	= 4;
+		const byte CMD_TIME_REQUEST	= 5;
 
 		// XBee subcommand codes
 		const byte CMD_NACK			= 0;
@@ -211,49 +212,102 @@ namespace RelayControllerTest {
 			//-----------------------------------------------------------------
 			// DETERMINE THE TYPE OF PACKET RECEIVED AND ACT ACCORDINGLY 
 			//-----------------------------------------------------------------
-			if(sensorSent && (command[0] == CMD_SENSOR_DATA)) {
-				// Check for acknowledgement
-				if(command[1] == CMD_ACK) {
-					sensorSent = false;
-					Debug.Print("Sensor data acknowledged!");
-				} else {
-					// TODO => Save the last sensor data to the data logger
-					Debug.Print("Need to write last sensor data to logger!");
-				}
-			}
-			else if(command[0] == CMD_THERMO_POWER) {	// Command sent to power on/off the thermostat
-				Debug.Print("Received command to change thermostat power status to " + (command[1] == STATUS_ON ? "ON" : "OFF") + " - NOT IMPLEMENTED IN HARDWARE");
-				dataPacket = new byte[] { CMD_THERMO_POWER, CMD_ACK };	// Acknowledge the command
-				//-----------------------------------------------------------------
-			} else if(command[0] == CMD_OVERRIDE) {	// Command to turn on/off the override and set the target temperature
-				dataPacket = new byte[] { CMD_OVERRIDE, CMD_ACK };	// By default, set the response to an acknowledgement
+			switch(command[0]) {
+				//-------------------------------------------------------------
+				case CMD_THERMO_POWER:	// Command sent to power on/off the thermostat
+					Debug.Print("Received command to change thermostat power status to " + (command[1] == STATUS_ON ? "ON" : "OFF") + " - NOT IMPLEMENTED IN HARDWARE");
+					dataPacket = new byte[] { CMD_THERMO_POWER, CMD_ACK };	// Acknowledge the command
+					break;
+				//-------------------------------------------------------------
+				case CMD_OVERRIDE:	// Command to turn on/off the override and set the target temperature
+					dataPacket = new byte[] { CMD_OVERRIDE, CMD_ACK };	// By default, set the response to an acknowledgement
 
-				// Check status flag
-				if(command[1] == STATUS_ON) {	// Turn on override mode
-					// Convert the byte array to a float (1st byte is the command, 2nd to 5th bytes are the float)
-					byte[] tempArray = new byte[4];
-					for(int i = 0; i < 4; i++) tempArray[i] = command[i+2];	// Copy the byte array for the float
-					overrideTemp = (double) ByteToFloat(tempArray);	// Set the target override temperature
+					// Check status flag
+					switch(command[1]) {
+						case STATUS_OFF:	// Turn off override mode
+							overrideOn = false;	// Turn off override status
+							Debug.Print("Received command to turn off override mode");
+							break;
+						case STATUS_ON:	// Turn on override mode
+							// Convert the byte array to a float (1st byte is the command, 2nd to 5th bytes are the float)
+							byte[] tempArray = new byte[4];
+							for(int i = 0; i < 4; i++) tempArray[i] = command[i+2];	// Copy the byte array for the float
+							overrideTemp = (double) ByteToFloat(tempArray);	// Set the target override temperature
 
-					// Change override status
-					overrideOn = true;	// Turn on override status
-					Debug.Print("Received command to turn on override mode with target temperature of " + overrideTemp);
-				} else if(command[1] == STATUS_OFF) {	// Turn off override mode
-					overrideOn = false;	// Turn off override status
-					Debug.Print("Received command to turn off override mode");
-				} else {	// Command not defined
-					Debug.Print("Received command to override mode (" + command[1] + ") not implemented");
-					dataPacket[1] = CMD_NACK;	// Indicate that the command is not understood
-				}
-				//-----------------------------------------------------------------
-			} else if(command[0] == CMD_RULE_CHANGE) {	// A command to change/view the thermostat rules has been made
-				// Take action based on the issued command
-				if(command[1] == STATUS_GET) dataPacket = ProcessGetRuleCMD();	// Get the rules and incorporate them into the response packet
-				else Debug.Print("Received TxRequest for CMD_RULE_CHANGE with status: " + command[1]);
-				//-----------------------------------------------------------------
-			} else {
-				Debug.Print("TxRequest type has not been implemented yet");
-				dataPacket = new byte[] { CMD_OVERRIDE, CMD_ACK };	// Acknowledge the command, even though it doesn't exist
+							// Change override status
+							overrideOn = true;	// Turn on override status
+							Debug.Print("Received command to turn on override mode with target temperature of " + overrideTemp);
+							break;
+						default:	// Command not defined
+							Debug.Print("Received command to override mode (" + command[1] + ") not implemented");
+							dataPacket[1] = CMD_NACK;	// Indicate that the command is not understood
+							break;
+					}
+					break;
+				//-------------------------------------------------------------
+				case CMD_RULE_CHANGE:	// A command to change/view the thermostat rules has been made
+					// Take action based on the issued command
+					switch(command[1]) {
+						case STATUS_GET:
+							dataPacket = ProcessGetRuleCMD();	// Get the rules and incorporate them into the response packet
+							break;
+						default:
+							Debug.Print("Received command to rule change mode (" + command[1] + ") not implemented");
+							dataPacket = new byte[] { CMD_RULE_CHANGE, CMD_NACK };
+							break;
+					}
+					break;
+				//-------------------------------------------------------------
+				case CMD_SENSOR_DATA:	// Should only receive this for a sensor data acknoledgement packet
+					// Check to see if a sensor data packet was sent recently
+					if(sensorSent) {
+						switch(command[1]) {
+							case CMD_NACK:
+								// TODO => Save the alst sensor data to the data logger
+								Debug.Print("Need to write last sensor data to logger!");
+								break;
+							case CMD_ACK:
+								sensorSent = false;	// Identify that there isn't a sensor reading not acknowledged
+								Debug.Print("Sensor data acknowledged!");
+								break;
+							default:
+								Debug.Print("Received command to sensor data mode (" + command[1] + ") not implemented");
+								break;
+						}
+					} else Debug.Print("Receiving sensor command without having sent unacknowledged sensor data - not sure how this happened!");
+					break;
+				//-------------------------------------------------------------
+				case CMD_TIME_REQUEST:	// Interact with the DS1307 on the I2C bus
+					// Take action based on issued command
+					dataPacket = new byte[] { CMD_TIME_REQUEST, CMD_NACK };
+					switch(command[1]) {
+						case STATUS_GET:	// Get the current time on the DS1307
+							// Get the time from the RTC and create the packet
+							DS1307BusSensor.RTCTime curTime = timeKeeper.GetTime();
+							dataPacket = new byte[] { CMD_TIME_REQUEST, STATUS_GET, curTime.second, curTime.minute, curTime.hour, curTime.weekday, curTime.day, curTime.month, curTime.year };
+							break;
+						case STATUS_UPDATE:	// Set the time on the DS1307
+							// Check that the data is there
+							if(command.Length == 9) {
+								// Convert to a time structure and send to DS1307
+								DS1307BusSensor.RTCTime setTime = new DS1307BusSensor.RTCTime(command[2], command[3], command[4], command[6], command[7], command[8], (DS1307BusSensor.DayOfWeek) command[5]);
+								timeKeeper.SetTime(setTime);
+								dataPacket[1] = CMD_ACK;
+							} else {
+								// Return an NACK
+								Debug.Print("Received command to set the time with incorrect number of command elements (" + command.Length + ")!");
+							}
+							break;
+						default:	// Command not implemented
+							Debug.Print("Received command to time request mode (" + command[1] + ") not implemented");
+							break;
+					}
+					break;
+				//-------------------------------------------------------------
+				default:// Acknowledge the command, even though it doesn't exist
+					Debug.Print("TxRequest type has not been implemented yet");
+					dataPacket = new byte[] { CMD_OVERRIDE, CMD_NACK };
+					break;
 			}
 
 			// Return the response data
@@ -457,7 +511,7 @@ namespace RelayControllerTest {
 			// Get the time and weekday for evaluating the rules
 			double curTime = DateTime.Now.Hour + DateTime.Now.Minute/60.0 + DateTime.Now.Second/3600.0;
 			RuleDays curWeekday = (RuleDays) ((int) DateTime.Now.DayOfWeek);	// Cast the returned DayOfWeek enum into the custome DayType enum
-			Debug.Print("Evaluating relay status on a " + curWeekday + " (" + DateTime.Now.ToString("dddd") + ") at " + curTime.ToString("F4") + " with measured temperature at " + temperature.ToString("F") + ": ");
+			Debug.Print("Evaluating relay status on a " + curWeekday + " (" + DateTime.Now.ToString("dddd") + ") at " + curTime.ToString("F4") + " (" + DateTime.Now.ToString() + ") with measured temperature at " + temperature.ToString("F") + ": ");
 
 			//-----------------------------------------------------------------
 			// TEMPERATURE LIMITS CHECK
