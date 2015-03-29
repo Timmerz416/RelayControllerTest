@@ -100,8 +100,7 @@ namespace RelayControllerTest {
 			//-----------------------------------------------------------------
 			// INITIALIZE THE TIME, RADIOS, TIMERS AND RULES
 			//-----------------------------------------------------------------
-			// Set the time on the netduino
-//			timeKeeper.SetTime(new DS1307BusSensor.RTCTime(0, 34, 23, 26, 3, 15, DS1307BusSensor.DayOfWeek.Thursday));
+			// Set the time on the netduino on startup from the DS1307 clock
 			Utility.SetLocalTime(timeKeeper.GetTime().getDateTime());
 
 			// Initialize the XBee
