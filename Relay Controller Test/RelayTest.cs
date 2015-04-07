@@ -251,6 +251,14 @@ namespace RelayControllerTest {
 						case STATUS_GET:
 							dataPacket = ProcessGetRuleCMD();	// Get the rules and incorporate them into the response packet
 							break;
+						case STATUS_ADD:
+							break;
+						case STATUS_DELETE:
+							break;
+						case STATUS_MOVE:
+							break;
+						case STATUS_UPDATE:
+							break;
 						default:
 							Debug.Print("Received command to rule change mode (" + command[1] + ") not implemented");
 							dataPacket = new byte[] { CMD_RULE_CHANGE, CMD_NACK };
