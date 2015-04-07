@@ -279,7 +279,6 @@ namespace RelayControllerTest {
 				//-------------------------------------------------------------
 				case CMD_TIME_REQUEST:	// Interact with the DS1307 on the I2C bus
 					// Take action based on issued command
-					dataPacket = new byte[] { CMD_TIME_REQUEST, CMD_NACK };
 					switch(command[1]) {
 						case STATUS_GET:	// Get the current time on the DS1307
 							// Get the time from the RTC and create the packet
@@ -292,14 +291,16 @@ namespace RelayControllerTest {
 								// Convert to a time structure and send to DS1307
 								DS1307BusSensor.RTCTime setTime = new DS1307BusSensor.RTCTime(command[2], command[3], command[4], command[6], command[7], command[8], (DS1307BusSensor.DayOfWeek) command[5]);
 								timeKeeper.SetTime(setTime);
-								dataPacket[1] = CMD_ACK;
+								dataPacket = new byte[] { CMD_TIME_REQUEST, STATUS_UPDATE, CMD_ACK };
 							} else {
 								// Return an NACK
 								Debug.Print("Received command to set the time with incorrect number of command elements (" + command.Length + ")!");
+								dataPacket = new byte[] { CMD_TIME_REQUEST, STATUS_UPDATE, CMD_NACK };
 							}
 							break;
 						default:	// Command not implemented
 							Debug.Print("Received command to time request mode (" + command[1] + ") not implemented");
+							dataPacket = new byte[] { CMD_TIME_REQUEST, command[1], CMD_NACK };
 							break;
 					}
 					break;
