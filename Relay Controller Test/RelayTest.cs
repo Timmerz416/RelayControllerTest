@@ -288,6 +288,18 @@ namespace RelayControllerTest {
 							break;
 						//-----------------------
 						case STATUS_MOVE:
+							// Create the default return packet
+							dataPacket = new byte[] { CMD_RULE_CHANGE, STATUS_MOVE, CMD_NACK };
+
+							// Check that the indicies are valid
+							if((command[2] < rules.Count) && (command[3] < rules.Count)) {
+								// Copy the rule
+								object moveRule = rules[command[2]];
+								rules.RemoveAt(command[2]);
+								rules.Insert(command[3], moveRule);
+
+								dataPacket[2] = CMD_ACK;
+							}
 							break;
 						//-----------------------
 						case STATUS_UPDATE:
