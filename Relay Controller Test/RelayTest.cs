@@ -291,6 +291,27 @@ namespace RelayControllerTest {
 							break;
 						//-----------------------
 						case STATUS_UPDATE:
+							// Create default return packet
+							dataPacket = new byte[] { CMD_RULE_CHANGE, STATUS_UPDATE, CMD_NACK };
+
+							// Check that the index makes sense
+							if(command[2] < rules.Count) {
+								// Create the rule floats
+								byte[] tempArray = new byte[4];
+								byte[] timeArray = new byte[4];
+								for(int i = 0; i < 4; i++) {
+									timeArray[i] = command[4+i];
+									tempArray[i] = command[8+i];
+								}
+								float time = ByteToFloat(timeArray);
+								float temp = ByteToFloat(tempArray);
+
+								// Add the updated rule and delete the old one
+								TemperatureRule updateRule = new TemperatureRule((RuleDays) command[3], time, temp);
+								rules.Insert(command[2], updateRule);
+								rules.RemoveAt(command[2] + 1);
+								dataPacket[2] = CMD_ACK;
+							}
 							break;
 						//-----------------------
 						default:
