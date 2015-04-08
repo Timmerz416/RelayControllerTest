@@ -248,9 +248,11 @@ namespace RelayControllerTest {
 				case CMD_RULE_CHANGE:	// A command to change/view the thermostat rules has been made
 					// Take action based on the issued command
 					switch(command[1]) {
+						//-----------------------
 						case STATUS_GET:
 							dataPacket = ProcessGetRuleCMD();	// Get the rules and incorporate them into the response packet
 							break;
+						//-----------------------
 						case STATUS_ADD:
 							// Create default return packet
 							dataPacket = new byte[] { CMD_RULE_CHANGE, STATUS_ADD, CMD_NACK };
@@ -273,12 +275,24 @@ namespace RelayControllerTest {
 								dataPacket[2] = CMD_ACK;
 							}
 							break;
+						//-----------------------
 						case STATUS_DELETE:
+							// Create the default return packet
+							dataPacket = new byte[] { CMD_RULE_CHANGE, STATUS_DELETE, CMD_NACK };
+
+							// Delete the entry if it makes sense
+							if(command[2] < rules.Count) {
+								rules.RemoveAt(command[2]);
+								dataPacket[2] = CMD_ACK;
+							}
 							break;
+						//-----------------------
 						case STATUS_MOVE:
 							break;
+						//-----------------------
 						case STATUS_UPDATE:
 							break;
+						//-----------------------
 						default:
 							Debug.Print("Received command to rule change mode (" + command[1] + ") not implemented");
 							dataPacket = new byte[] { CMD_RULE_CHANGE, CMD_NACK };
